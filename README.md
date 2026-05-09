@@ -124,11 +124,38 @@ npm run build
 npm run start:stdio
 ```
 
-## License
+## Client Setup
 
-MIT License. See [LICENSE](./LICENSE).
+This project is a generic stdio MCP server with an MCP Apps UI resource. It can be used from any MCP client that can start local stdio servers. Clients with MCP Apps support can render the interactive chart preview; clients without MCP Apps support can still use the text and structured tool results.
 
-## Rubberband App Config
+Build the server once before wiring it into a client:
+
+```bash
+git clone https://github.com/metalshanked/mcp-app-trino.git
+cd mcp-app-trino
+npm install
+npm run build
+```
+
+Use the absolute path to `dist/server/index.js` in client configs below. Replace `/absolute/path/to/mcp-app-trino` with your local clone path.
+
+Common environment variables:
+
+```json
+{
+  "TRINO_HOST": "localhost",
+  "TRINO_PORT": "8080",
+  "TRINO_SCHEME": "http",
+  "TRINO_USER": "trino",
+  "TRINO_CATALOG": "tpch",
+  "TRINO_SCHEMA": "tiny",
+  "TRINO_AUTH_TYPE": "none"
+}
+```
+
+For secured Trino or Starburst, add `TRINO_PASSWORD` with `TRINO_AUTH_TYPE=basic`, or `TRINO_ACCESS_TOKEN` with `TRINO_AUTH_TYPE=bearer`.
+
+### Rubberband
 
 Add this app to Rubberband's `mcp-apps.json`:
 
@@ -177,6 +204,150 @@ Add this app to Rubberband's `mcp-apps.json`:
 }
 ```
 
+### Claude Code
+
+Claude Code supports local stdio MCP servers through `claude mcp add` or JSON config. See the Claude MCP docs for current details.
+
+CLI example:
+
+```bash
+claude mcp add --transport stdio \
+  --env TRINO_HOST=localhost \
+  --env TRINO_PORT=8080 \
+  --env TRINO_SCHEME=http \
+  --env TRINO_USER=trino \
+  --env TRINO_CATALOG=tpch \
+  --env TRINO_SCHEMA=tiny \
+  --env TRINO_AUTH_TYPE=none \
+  mcp-app-trino -- node /absolute/path/to/mcp-app-trino/dist/server/index.js
+```
+
+Project `.mcp.json` example:
+
+```json
+{
+  "mcpServers": {
+    "mcp-app-trino": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["/absolute/path/to/mcp-app-trino/dist/server/index.js"],
+      "env": {
+        "TRINO_HOST": "localhost",
+        "TRINO_PORT": "8080",
+        "TRINO_SCHEME": "http",
+        "TRINO_USER": "trino",
+        "TRINO_CATALOG": "tpch",
+        "TRINO_SCHEMA": "tiny",
+        "TRINO_AUTH_TYPE": "none"
+      }
+    }
+  }
+}
+```
+
+### Claude Desktop
+
+Claude Desktop uses an MCP server configuration file with the `mcpServers` object. Add an entry like this to `claude_desktop_config.json`, then restart Claude Desktop:
+
+```json
+{
+  "mcpServers": {
+    "mcp-app-trino": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["/absolute/path/to/mcp-app-trino/dist/server/index.js"],
+      "env": {
+        "TRINO_HOST": "localhost",
+        "TRINO_PORT": "8080",
+        "TRINO_SCHEME": "http",
+        "TRINO_USER": "trino",
+        "TRINO_CATALOG": "tpch",
+        "TRINO_SCHEMA": "tiny",
+        "TRINO_AUTH_TYPE": "none"
+      }
+    }
+  }
+}
+```
+
+### Cursor
+
+Cursor supports project config at `.cursor/mcp.json` and global config at `~/.cursor/mcp.json`.
+
+```json
+{
+  "mcpServers": {
+    "mcp-app-trino": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["/absolute/path/to/mcp-app-trino/dist/server/index.js"],
+      "env": {
+        "TRINO_HOST": "localhost",
+        "TRINO_PORT": "8080",
+        "TRINO_SCHEME": "http",
+        "TRINO_USER": "trino",
+        "TRINO_CATALOG": "tpch",
+        "TRINO_SCHEMA": "tiny",
+        "TRINO_AUTH_TYPE": "none"
+      }
+    }
+  }
+}
+```
+
+### VS Code
+
+VS Code MCP configuration uses a top-level `servers` object. You can place this in `.vscode/mcp.json` or use the MCP user configuration command. MCP Apps rendering may require the `chat.mcp.apps.enabled` setting, depending on your VS Code build.
+
+```json
+{
+  "servers": {
+    "mcpAppTrino": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["/absolute/path/to/mcp-app-trino/dist/server/index.js"],
+      "env": {
+        "TRINO_HOST": "localhost",
+        "TRINO_PORT": "8080",
+        "TRINO_SCHEME": "http",
+        "TRINO_USER": "trino",
+        "TRINO_CATALOG": "tpch",
+        "TRINO_SCHEMA": "tiny",
+        "TRINO_AUTH_TYPE": "none"
+      }
+    }
+  }
+}
+```
+
+### Other MCP Clients
+
+Any stdio MCP client should be able to start the server with:
+
+```json
+{
+  "type": "stdio",
+  "command": "node",
+  "args": ["/absolute/path/to/mcp-app-trino/dist/server/index.js"],
+  "env": {
+    "TRINO_HOST": "localhost",
+    "TRINO_PORT": "8080",
+    "TRINO_SCHEME": "http",
+    "TRINO_USER": "trino",
+    "TRINO_CATALOG": "tpch",
+    "TRINO_SCHEMA": "tiny",
+    "TRINO_AUTH_TYPE": "none"
+  }
+}
+```
+
+## Client References
+
+- [Claude Code MCP docs](https://code.claude.com/docs/en/mcp)
+- [Cursor MCP docs](https://docs.cursor.com/advanced/model-context-protocol)
+- [VS Code MCP configuration reference](https://code.visualstudio.com/docs/copilot/reference/mcp-configuration)
+- [VS Code MCP Apps notes](https://code.visualstudio.com/docs/copilot/customization/mcp-servers)
+
 ## Example Prompt
 
 ```text
@@ -199,3 +370,7 @@ For richer charts, pass the chart-specific fields to `visualize_query`:
 - `pie` / `donut` / `sunburst` / `treemap`: `partitionFields`, `valueField`
 - `bubble`: `xField`, `yField`, `sizeField`, optional `colorField`
 - `goal`: `valueField`, `goalField`
+
+## License
+
+MIT License. See [LICENSE](./LICENSE).
