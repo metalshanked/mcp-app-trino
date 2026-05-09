@@ -1,0 +1,42 @@
+{
+  "name": "mcp-app-trino",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "MCP Apps-compliant Trino and Starburst visualization server with Elastic Charts previews.",
+  "bin": {
+    "mcp-app-trino": "./dist/server/index.js"
+  },
+  "scripts": {
+    "dev": "concurrently \"npm:dev:server\" \"npm:dev:preview\"",
+    "dev:server": "tsx watch src/server/index.ts",
+    "dev:preview": "vite --config vite.config.ts",
+    "build": "vite build --config vite.config.ts && tsc -p tsconfig.server.json",
+    "start": "node dist/server/index.js",
+    "start:stdio": "node dist/server/index.js --stdio",
+    "typecheck": "tsc --noEmit -p tsconfig.server.json && tsc --noEmit -p tsconfig.preview.json"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@elastic/charts": "^71.5.2",
+    "@modelcontextprotocol/ext-apps": "^1.7.1",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@vitejs/plugin-react": "^5.1.1",
+    "vite-plugin-singlefile": "^2.3.2",
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.3",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "concurrently": "^9.2.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vite": "^8.0.11"
+  }
+}

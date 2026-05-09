@@ -1,0 +1,144 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  color: #17212b;
+  background: #f7f9fb;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.app {
+  min-height: 100vh;
+  padding: 18px;
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 14px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 680;
+  letter-spacing: 0;
+}
+
+p {
+  margin: 5px 0 0;
+  color: #536474;
+  font-size: 13px;
+}
+
+.badge {
+  flex: 0 0 auto;
+  border: 1px solid #c9d6e2;
+  background: #ffffff;
+  color: #24435c;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.chartPanel {
+  min-height: 460px;
+  border: 1px solid #d8e2ea;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 14px;
+}
+
+.chartWrap {
+  width: 100%;
+  min-height: 420px;
+}
+
+.metric {
+  min-height: 420px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+}
+
+.metric span {
+  color: #536474;
+  font-size: 14px;
+}
+
+.metric strong {
+  color: #0f6b7f;
+  font-size: clamp(36px, 12vw, 82px);
+  line-height: 1;
+}
+
+.tableWrap {
+  overflow: auto;
+  max-height: 520px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+th,
+td {
+  border-bottom: 1px solid #e7edf3;
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+th {
+  position: sticky;
+  top: 0;
+  background: #f0f5f8;
+  color: #2f4354;
+  font-weight: 650;
+}
+
+.queryDetails {
+  margin-top: 12px;
+  border: 1px solid #d8e2ea;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 10px 12px;
+}
+
+summary {
+  cursor: pointer;
+  color: #24435c;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+pre {
+  margin: 10px 0 0;
+  overflow: auto;
+  color: #22313f;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.state {
+  min-height: 100vh;
+  display: grid;
+  place-content: center;
+  padding: 24px;
+  text-align: center;
+}
+
+.state h1 {
+  font-size: 18px;
+}
