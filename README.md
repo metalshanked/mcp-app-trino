@@ -116,6 +116,39 @@ TRINO_PASSWORD=...
 
 Bearer token auth is also supported with `TRINO_AUTH_TYPE=bearer` and `TRINO_ACCESS_TOKEN`.
 
+### TLS
+
+For internal or self-signed Trino/Starburst endpoints, prefer passing a CA certificate instead of disabling verification:
+
+```bash
+TRINO_SCHEME=https
+TRINO_CA_CERT_FILE=/absolute/path/to/ca.pem
+```
+
+You can also pass PEM content directly. Literal `\n` sequences are converted to newlines:
+
+```bash
+TRINO_CA_CERT="-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----"
+```
+
+If you need to bypass certificate verification for an internal endpoint, set one of:
+
+```bash
+TRINO_INSECURE_TLS=true
+TRINO_TLS_INSECURE=true
+NODE_TLS_REJECT_UNAUTHORIZED=0
+```
+
+For mutual TLS/client-certificate auth, provide a client cert and key:
+
+```bash
+TRINO_CLIENT_CERT_FILE=/absolute/path/to/client.crt
+TRINO_CLIENT_KEY_FILE=/absolute/path/to/client.key
+TRINO_CLIENT_KEY_PASSPHRASE=
+```
+
+Direct PEM content is also supported with `TRINO_CLIENT_CERT` and `TRINO_CLIENT_KEY`. Starburst-prefixed aliases are supported for the same settings: `STARBURST_CA_CERT_FILE`, `STARBURST_CLIENT_CERT_FILE`, `STARBURST_CLIENT_KEY_FILE`, `STARBURST_INSECURE_TLS`, and related non-`_FILE` variants.
+
 ## Local Development
 
 ```bash
@@ -191,6 +224,22 @@ Add this app to Rubberband's `mcp-apps.json`:
     "TRINO_CATALOG",
     "TRINO_SCHEMA",
     "TRINO_SOURCE",
+    "TRINO_INSECURE_TLS",
+    "TRINO_TLS_INSECURE",
+    "TRINO_CA_CERT",
+    "TRINO_CA_CERT_FILE",
+    "TRINO_TLS_CA_CERT",
+    "TRINO_TLS_CA_CERT_FILE",
+    "TRINO_CLIENT_CERT",
+    "TRINO_CLIENT_CERT_FILE",
+    "TRINO_CLIENT_KEY",
+    "TRINO_CLIENT_KEY_FILE",
+    "TRINO_CLIENT_KEY_PASSPHRASE",
+    "TRINO_TLS_CLIENT_CERT",
+    "TRINO_TLS_CLIENT_CERT_FILE",
+    "TRINO_TLS_CLIENT_KEY",
+    "TRINO_TLS_CLIENT_KEY_FILE",
+    "TRINO_TLS_CLIENT_KEY_PASSPHRASE",
     "STARBURST_HOST",
     "STARBURST_PORT",
     "STARBURST_SCHEME",
@@ -199,6 +248,22 @@ Add this app to Rubberband's `mcp-apps.json`:
     "STARBURST_ACCESS_TOKEN",
     "STARBURST_CATALOG",
     "STARBURST_SCHEMA",
+    "STARBURST_INSECURE_TLS",
+    "STARBURST_TLS_INSECURE",
+    "STARBURST_CA_CERT",
+    "STARBURST_CA_CERT_FILE",
+    "STARBURST_TLS_CA_CERT",
+    "STARBURST_TLS_CA_CERT_FILE",
+    "STARBURST_CLIENT_CERT",
+    "STARBURST_CLIENT_CERT_FILE",
+    "STARBURST_CLIENT_KEY",
+    "STARBURST_CLIENT_KEY_FILE",
+    "STARBURST_CLIENT_KEY_PASSPHRASE",
+    "STARBURST_TLS_CLIENT_CERT",
+    "STARBURST_TLS_CLIENT_CERT_FILE",
+    "STARBURST_TLS_CLIENT_KEY",
+    "STARBURST_TLS_CLIENT_KEY_FILE",
+    "STARBURST_TLS_CLIENT_KEY_PASSPHRASE",
     "NODE_TLS_REJECT_UNAUTHORIZED"
   ]
 }

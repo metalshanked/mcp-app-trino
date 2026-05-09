@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import { Agent, type Dispatcher } from 'undici';
 import type { QueryResult, TrinoColumn, TrinoRow } from './types.js';
 
 type TrinoClientOptions = {
@@ -11,6 +13,7 @@ type TrinoClientOptions = {
   catalog?: string;
   schema?: string;
   source: string;
+  dispatcher?: Dispatcher;
 };
 
 type TrinoStatementResponse = {
@@ -44,8 +47,9 @@ export class TrinoClient {
     const response = await fetch(`${this.baseUrl}/v1/statement`, {
       method: 'POST',
       headers: this.headers(),
-      body: sql
-    });
+      body: sql,
+      ...this.fetchTlsOptions()
+    } as RequestInit);
     const first = await this.readResponse(response);
     return this.collect(first, maxRows);
   }
@@ -96,7 +100,10 @@ export class TrinoClient {
       warnings = current.warnings || warnings;
 
       if (!current.nextUri || rows.length >= maxRows) break;
-      const nextResponse = await fetch(current.nextUri, { headers: this.headers(false) });
+      const nextResponse = await fetch(current.nextUri, {
+        headers: this.headers(false),
+        ...this.fetchTlsOptions()
+      } as RequestInit);
       current = await this.readResponse(nextResponse);
     }
 
@@ -136,6 +143,10 @@ export class TrinoClient {
     }
     return headers;
   }
+
+  private fetchTlsOptions() {
+    return this.options.dispatcher ? ({ dispatcher: this.options.dispatcher } as RequestInit & { dispatcher: Dispatcher }) : {};
+  }
 }
 
 export function createTrinoClientFromEnv() {
@@ -156,7 +167,8 @@ export function createTrinoClientFromEnv() {
     authType,
     catalog: process.env.TRINO_CATALOG || process.env.STARBURST_CATALOG,
     schema: process.env.TRINO_SCHEMA || process.env.STARBURST_SCHEMA,
-    source: process.env.TRINO_SOURCE || 'mcp-app-trino'
+    source: process.env.TRINO_SOURCE || 'mcp-app-trino',
+    dispatcher: createTlsDispatcherFromEnv()
   });
 }
 
@@ -173,6 +185,63 @@ function normalizeAuthType(value: string | undefined, password?: string, accessT
   if (accessToken) return 'bearer';
   if (password) return 'basic';
   return 'none';
+}
+
+function createTlsDispatcherFromEnv(): Dispatcher | undefined {
+  const rejectUnauthorized = !readBooleanEnv(
+    'TRINO_INSECURE_TLS',
+    'TRINO_TLS_INSECURE',
+    'STARBURST_INSECURE_TLS',
+    'STARBURST_TLS_INSECURE'
+  ) && process.env.NODE_TLS_REJECT_UNAUTHORIZED !== '0';
+  const ca = readPemEnv(
+    ['TRINO_CA_CERT', 'TRINO_TLS_CA_CERT', 'STARBURST_CA_CERT', 'STARBURST_TLS_CA_CERT'],
+    ['TRINO_CA_CERT_FILE', 'TRINO_TLS_CA_CERT_FILE', 'STARBURST_CA_CERT_FILE', 'STARBURST_TLS_CA_CERT_FILE']
+  );
+  const cert = readPemEnv(
+    ['TRINO_CLIENT_CERT', 'TRINO_TLS_CLIENT_CERT', 'STARBURST_CLIENT_CERT', 'STARBURST_TLS_CLIENT_CERT'],
+    ['TRINO_CLIENT_CERT_FILE', 'TRINO_TLS_CLIENT_CERT_FILE', 'STARBURST_CLIENT_CERT_FILE', 'STARBURST_TLS_CLIENT_CERT_FILE']
+  );
+  const key = readPemEnv(
+    ['TRINO_CLIENT_KEY', 'TRINO_TLS_CLIENT_KEY', 'STARBURST_CLIENT_KEY', 'STARBURST_TLS_CLIENT_KEY'],
+    ['TRINO_CLIENT_KEY_FILE', 'TRINO_TLS_CLIENT_KEY_FILE', 'STARBURST_CLIENT_KEY_FILE', 'STARBURST_TLS_CLIENT_KEY_FILE']
+  );
+  const passphrase = readFirstEnv('TRINO_CLIENT_KEY_PASSPHRASE', 'TRINO_TLS_CLIENT_KEY_PASSPHRASE', 'STARBURST_CLIENT_KEY_PASSPHRASE', 'STARBURST_TLS_CLIENT_KEY_PASSPHRASE');
+
+  if (rejectUnauthorized && !ca && !cert && !key && !passphrase) return undefined;
+
+  return new Agent({
+    connect: {
+      rejectUnauthorized,
+      ...(ca ? { ca } : {}),
+      ...(cert ? { cert } : {}),
+      ...(key ? { key } : {}),
+      ...(passphrase ? { passphrase } : {})
+    }
+  });
+}
+
+function readBooleanEnv(...keys: string[]) {
+  const value = readFirstEnv(...keys);
+  if (!value) return false;
+  return ['1', 'true', 'yes', 'on'].includes(value.toLowerCase());
+}
+
+function readFirstEnv(...keys: string[]) {
+  for (const key of keys) {
+    const value = process.env[key];
+    if (value) return value;
+  }
+  return '';
+}
+
+function readPemEnv(valueKeys: string[], fileKeys: string[]) {
+  const direct = readFirstEnv(...valueKeys);
+  if (direct) return direct.replace(/\\n/g, '\n');
+
+  const filePath = readFirstEnv(...fileKeys);
+  if (!filePath) return undefined;
+  return fs.readFileSync(filePath, 'utf8');
 }
 
 function normalizeColumns(columns?: Array<{ name: string; type: string }>): TrinoColumn[] {
