@@ -172,10 +172,11 @@ server.registerTool(
   'get_table_schema',
   {
     title: 'Get Trino Table Schema',
-    description: 'Describe a Trino table. Pass a fully qualified table when possible.',
-    inputSchema: { table: z.string().min(1) }
+    description: 'Describe a Trino table. Pass a simple qualified identifier such as catalog.schema.table when possible.',
+    inputSchema: { table: z.string().min(1).describe('Simple unquoted table identifier, optionally qualified as catalog.schema.table.') }
   },
   async ({ table }) => {
+    assertQualifiedIdentifier(table);
     const result = await createTrinoClientFromEnv().describeTable(table);
     return { content: [{ type: 'text', text: JSON.stringify(result.rows, null, 2) }], structuredContent: result };
   }
@@ -203,10 +204,150 @@ async function loadPreviewHtml() {
 }
 
 function assertReadOnlySql(sql: string) {
-  const normalized = sql.trim().replace(/^\/\*[\s\S]*?\*\//, '').trim().toLowerCase();
+  const withoutComments = stripSqlComments(sql).trim();
+  const normalized = withoutComments.toLowerCase();
+
+  if (!withoutComments || hasSemicolonOutsideString(withoutComments)) {
+    throw new Error('Only a single read-only SQL statement is allowed; semicolons and multi-statement requests are rejected.');
+  }
+
   if (!/^(select|with|show|describe|desc|explain)\b/.test(normalized)) {
     throw new Error('Only read-only SELECT, WITH, SHOW, DESCRIBE, and EXPLAIN statements are allowed.');
   }
+
+  const searchable = stripSqlStrings(withoutComments).toLowerCase();
+  const blocked = searchable.match(/\b(insert|update|delete|create|drop|alter|truncate|merge|call|grant|revoke|set|reset|start|commit|rollback|execute|prepare|deallocate|use|analyze)\b/);
+  if (blocked) {
+    throw new Error(`Statement contains blocked keyword "${blocked[1]}"; only read-only queries are allowed.`);
+  }
+}
+
+function assertQualifiedIdentifier(value: string) {
+  const identifier = '[A-Za-z_][A-Za-z0-9_$]*';
+  const pattern = new RegExp(`^${identifier}(\\.${identifier}){0,2}$`);
+  if (!pattern.test(value.trim())) {
+    throw new Error('Table names must be simple unquoted identifiers, optionally qualified as catalog.schema.table.');
+  }
+}
+
+function stripSqlComments(sql: string) {
+  let output = '';
+  let inSingle = false;
+  let inDouble = false;
+  let inLineComment = false;
+  let inBlockComment = false;
+
+  for (let index = 0; index < sql.length; index += 1) {
+    const char = sql[index];
+    const next = sql[index + 1];
+
+    if (inLineComment) {
+      if (char === '\n') {
+        inLineComment = false;
+        output += char;
+      }
+      continue;
+    }
+
+    if (inBlockComment) {
+      if (char === '*' && next === '/') {
+        inBlockComment = false;
+        index += 1;
+        output += ' ';
+      }
+      continue;
+    }
+
+    if (!inSingle && !inDouble && char === '-' && next === '-') {
+      inLineComment = true;
+      index += 1;
+      output += ' ';
+      continue;
+    }
+
+    if (!inSingle && !inDouble && char === '/' && next === '*') {
+      inBlockComment = true;
+      index += 1;
+      output += ' ';
+      continue;
+    }
+
+    if (!inDouble && char === "'") {
+      output += char;
+      if (inSingle && next === "'") {
+        output += next;
+        index += 1;
+      } else {
+        inSingle = !inSingle;
+      }
+      continue;
+    }
+
+    if (!inSingle && char === '"') inDouble = !inDouble;
+    output += char;
+  }
+
+  return output;
+}
+
+function stripSqlStrings(sql: string) {
+  let output = '';
+  let inSingle = false;
+  let inDouble = false;
+
+  for (let index = 0; index < sql.length; index += 1) {
+    const char = sql[index];
+    const next = sql[index + 1];
+
+    if (!inDouble && char === "'") {
+      output += ' ';
+      if (inSingle && next === "'") {
+        output += ' ';
+        index += 1;
+      } else {
+        inSingle = !inSingle;
+      }
+      continue;
+    }
+
+    if (!inSingle && char === '"') {
+      output += ' ';
+      inDouble = !inDouble;
+      continue;
+    }
+
+    output += inSingle || inDouble ? ' ' : char;
+  }
+
+  return output;
+}
+
+function hasSemicolonOutsideString(sql: string) {
+  let inSingle = false;
+  let inDouble = false;
+
+  for (let index = 0; index < sql.length; index += 1) {
+    const char = sql[index];
+    const next = sql[index + 1];
+
+    if (!inDouble && char === "'") {
+      if (inSingle && next === "'") {
+        index += 1;
+      } else {
+        inSingle = !inSingle;
+      }
+      continue;
+    }
+
+    if (!inSingle && char === '"') {
+      inDouble = !inDouble;
+      continue;
+    }
+
+    if (!inSingle && !inDouble && char === ';') return true;
+  }
+
+  return false;
 }
 
 function inferChartSpec(

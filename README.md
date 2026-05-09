@@ -11,6 +11,85 @@ MCP Apps-compliant Trino and Starburst query visualization server. It exposes no
 - Elastic Charts previews for bar, stacked bar, normalized stacked bar, line, area, stacked area, scatter, bubble, heatmap, pie, donut, sunburst, treemap, metric, goal, and table views.
 - Stdio transport compatible with Rubberband, Claude Desktop, Cursor, and other MCP clients.
 
+## Tools
+
+### `visualize_query`
+
+Executes a read-only Trino/Starburst SQL query and returns an MCP App preview rendered with Elastic Charts.
+
+Inputs:
+
+- `sql`: read-only SQL statement.
+- `chartType`: `bar`, `stacked_bar`, `normalized_stacked_bar`, `line`, `area`, `stacked_area`, `scatter`, `bubble`, `heatmap`, `pie`, `donut`, `sunburst`, `treemap`, `metric`, `goal`, or `table`.
+- `title`: optional chart title.
+- `xField`, `yField`, `seriesField`: common XY chart fields.
+- `valueField`: numeric measure for heatmaps, partition charts, metric, and goal charts.
+- `rowField`, `columnField`: heatmap dimensions.
+- `colorField`, `sizeField`: scatter/bubble encodings.
+- `goalField`: goal/target value for goal charts.
+- `partitionFields`: dimensions for pie, donut, sunburst, and treemap charts.
+- `maxRows`: row limit for preview data, default `1000`, maximum `5000`.
+
+### `execute_query`
+
+Executes a read-only Trino/Starburst SQL query and returns JSON rows without an MCP App preview.
+
+Inputs:
+
+- `sql`: read-only SQL statement.
+- `maxRows`: row limit, default `1000`, maximum `5000`.
+
+### `list_catalogs`
+
+Lists available Trino catalogs.
+
+### `list_schemas`
+
+Lists schemas, optionally for a supplied catalog.
+
+Inputs:
+
+- `catalog`: optional catalog name.
+
+### `list_tables`
+
+Lists tables, optionally scoped to a catalog and schema.
+
+Inputs:
+
+- `catalog`: optional catalog name.
+- `schema`: optional schema name.
+
+### `get_table_schema`
+
+Runs `DESCRIBE` for a table and returns the table schema. The table input is limited to simple unquoted identifiers, optionally qualified as `catalog.schema.table`.
+
+Inputs:
+
+- `table`: table identifier such as `tpch.tiny.orders`.
+
+### `explain_query`
+
+Runs `EXPLAIN` for a read-only SQL query.
+
+Inputs:
+
+- `sql`: read-only SQL statement to explain.
+
+## Safety Model
+
+This server is designed for read-only analytics, but no application-layer SQL guard should be treated as a complete database security boundary.
+
+Current guardrails:
+
+- Only `SELECT`, `WITH`, `SHOW`, `DESCRIBE`, `DESC`, and `EXPLAIN` statements are accepted.
+- Semicolons are rejected to avoid multi-statement requests.
+- Mutating/control keywords such as `INSERT`, `UPDATE`, `DELETE`, `CREATE`, `DROP`, `ALTER`, `TRUNCATE`, `MERGE`, `CALL`, `GRANT`, `REVOKE`, `SET`, `ANALYZE`, `COMMIT`, and `ROLLBACK` are blocked outside strings/comments.
+- Discovery helper tools quote catalog/schema identifiers where they compose SQL.
+- `get_table_schema` rejects arbitrary SQL fragments and only accepts simple qualified table identifiers.
+
+This is not a claim of being 100% immune to SQL injection or misuse. The strongest protection is to connect with a Trino/Starburst identity that has read-only permissions at the catalog/schema/table level. Treat the SQL validator as defense in depth, not as the primary permission model.
+
 ## Configuration
 
 Set environment variables before starting the server:
@@ -44,6 +123,10 @@ npm install
 npm run build
 npm run start:stdio
 ```
+
+## License
+
+MIT License. See [LICENSE](./LICENSE).
 
 ## Rubberband App Config
 
