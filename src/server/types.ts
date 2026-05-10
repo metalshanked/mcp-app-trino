@@ -28,6 +28,7 @@ export type ChartType =
   | 'donut'
   | 'sunburst'
   | 'treemap'
+  | 'graph'
   | 'metric'
   | 'goal'
   | 'table';
@@ -44,6 +45,11 @@ export type ChartSpec = {
   colorField?: string;
   sizeField?: string;
   goalField?: string;
+  sourceField?: string;
+  targetField?: string;
+  edgeWeightField?: string;
+  nodeLabelField?: string;
+  groupField?: string;
   partitionFields?: string[];
 };
 

@@ -9,7 +9,7 @@ MCP Apps-compliant Trino and Starburst query visualization server. It exposes no
 - Discovery tools: `list_catalogs`, `list_schemas`, `list_tables`, `get_table_schema`, `explain_query`.
 - MCP Apps UI tool: `visualize_query`.
 - MCP Apps preview controls can call back through the host bridge to refresh the query, switch chart types, remap fields, adjust row limits, and replace the chart without a new chat turn.
-- Elastic Charts previews for bar, stacked bar, normalized stacked bar, line, area, stacked area, scatter, bubble, heatmap, pie, donut, sunburst, treemap, metric, goal, and table views.
+- Elastic Charts previews for bar, stacked bar, normalized stacked bar, line, area, stacked area, scatter, bubble, heatmap, pie, donut, sunburst, treemap, metric, goal, and table views, plus force-directed graph/network views.
 - Stdio transport compatible with Rubberband, Claude Desktop, Cursor, and other MCP clients.
 
 ## Tools
@@ -22,13 +22,14 @@ In MCP Apps clients that expose server tool calls to the iframe, the preview als
 Inputs:
 
 - `sql`: read-only SQL statement.
-- `chartType`: `bar`, `stacked_bar`, `normalized_stacked_bar`, `line`, `area`, `stacked_area`, `scatter`, `bubble`, `heatmap`, `pie`, `donut`, `sunburst`, `treemap`, `metric`, `goal`, or `table`.
+- `chartType`: `bar`, `stacked_bar`, `normalized_stacked_bar`, `line`, `area`, `stacked_area`, `scatter`, `bubble`, `heatmap`, `pie`, `donut`, `sunburst`, `treemap`, `graph`, `metric`, `goal`, or `table`.
 - `title`: optional chart title.
 - `xField`, `yField`, `seriesField`: common XY chart fields.
 - `valueField`: numeric measure for heatmaps, partition charts, metric, and goal charts.
 - `rowField`, `columnField`: heatmap dimensions.
 - `colorField`, `sizeField`: scatter/bubble encodings.
 - `goalField`: goal/target value for goal charts.
+- `sourceField`, `targetField`, `edgeWeightField`, `nodeLabelField`, `groupField`: graph/network encodings.
 - `partitionFields`: dimensions for pie, donut, sunburst, and treemap charts.
 - `maxRows`: row limit for preview data, default `1000`, maximum `5000`.
 
@@ -437,6 +438,19 @@ For richer charts, pass the chart-specific fields to `visualize_query`:
 - `pie` / `donut` / `sunburst` / `treemap`: `partitionFields`, `valueField`
 - `bubble`: `xField`, `yField`, `sizeField`, optional `colorField`
 - `goal`: `valueField`, `goalField`
+- `graph`: `sourceField`, `targetField`, optional `edgeWeightField`, `nodeLabelField`, `groupField`
+
+Graph/network example:
+
+```sql
+SELECT source_service AS source, target_service AS target, count(*) AS weight
+FROM service_calls
+GROUP BY source_service, target_service
+ORDER BY weight DESC
+LIMIT 200
+```
+
+Use `chartType: "graph"`, `sourceField: "source"`, `targetField: "target"`, and `edgeWeightField: "weight"`.
 
 ## License
 

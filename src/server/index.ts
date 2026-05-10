@@ -26,6 +26,7 @@ const chartTypes = [
   'donut',
   'sunburst',
   'treemap',
+  'graph',
   'metric',
   'goal',
   'table'
@@ -74,6 +75,11 @@ registerAppTool(
       colorField: z.string().optional().describe('Optional field for color grouping on scatter/bubble charts.'),
       sizeField: z.string().optional().describe('Optional numeric field for bubble size.'),
       goalField: z.string().optional().describe('Optional numeric target field for goal charts.'),
+      sourceField: z.string().optional().describe('Source node field for graph visualizations.'),
+      targetField: z.string().optional().describe('Target node field for graph visualizations.'),
+      edgeWeightField: z.string().optional().describe('Optional numeric edge weight field for graph visualizations.'),
+      nodeLabelField: z.string().optional().describe('Optional node label field for graph visualizations.'),
+      groupField: z.string().optional().describe('Optional field used to color graph nodes by group.'),
       partitionFields: z.array(z.string()).optional().describe('Partition dimensions for pie, donut, sunburst, and treemap charts.'),
       maxRows: z.number().int().positive().max(5000).default(1000).describe('Maximum rows to fetch for preview rendering.')
     },
@@ -83,13 +89,50 @@ registerAppTool(
       }
     }
   },
-  async ({ sql, chartType, title, xField, yField, seriesField, valueField, rowField, columnField, colorField, sizeField, goalField, partitionFields, maxRows }) => {
+  async ({
+    sql,
+    chartType,
+    title,
+    xField,
+    yField,
+    seriesField,
+    valueField,
+    rowField,
+    columnField,
+    colorField,
+    sizeField,
+    goalField,
+    sourceField,
+    targetField,
+    edgeWeightField,
+    nodeLabelField,
+    groupField,
+    partitionFields,
+    maxRows
+  }) => {
     assertReadOnlySql(sql);
     const client = createTrinoClientFromEnv();
     const result = await client.execute(sql, maxRows);
     const spec = inferChartSpec(
       chartType,
-      { title, xField, yField, seriesField, valueField, rowField, columnField, colorField, sizeField, goalField, partitionFields },
+      {
+        title,
+        xField,
+        yField,
+        seriesField,
+        valueField,
+        rowField,
+        columnField,
+        colorField,
+        sizeField,
+        goalField,
+        sourceField,
+        targetField,
+        edgeWeightField,
+        nodeLabelField,
+        groupField,
+        partitionFields
+      },
       result.columns
     );
     const payload: VisualizationPayload = {
@@ -379,6 +422,11 @@ function inferChartSpec(
     colorField: requested.colorField || requested.seriesField,
     sizeField: requested.sizeField || secondNumeric?.name,
     goalField: requested.goalField || secondNumeric?.name,
+    sourceField: requested.sourceField || requested.xField || dimension?.name || columns[0]?.name,
+    targetField: requested.targetField || requested.seriesField || secondDimension?.name || columns[1]?.name || columns[0]?.name,
+    edgeWeightField: requested.edgeWeightField || requested.valueField || requested.yField || numeric?.name,
+    nodeLabelField: requested.nodeLabelField,
+    groupField: requested.groupField || requested.colorField,
     partitionFields
   };
 }

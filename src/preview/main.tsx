@@ -2,6 +2,15 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App as McpApp, PostMessageTransport } from '@modelcontextprotocol/ext-apps';
 import {
+  forceCenter,
+  forceCollide,
+  forceLink,
+  forceManyBody,
+  forceSimulation,
+  type SimulationLinkDatum,
+  type SimulationNodeDatum
+} from 'd3-force';
+import {
   AreaSeries,
   Axis,
   BarSeries,
@@ -41,6 +50,7 @@ type Payload = {
       | 'donut'
       | 'sunburst'
       | 'treemap'
+      | 'graph'
       | 'metric'
       | 'goal'
       | 'table';
@@ -54,6 +64,11 @@ type Payload = {
     colorField?: string;
     sizeField?: string;
     goalField?: string;
+    sourceField?: string;
+    targetField?: string;
+    edgeWeightField?: string;
+    nodeLabelField?: string;
+    groupField?: string;
     partitionFields?: string[];
   };
   columns: Array<{ name: string; type: string }>;
@@ -77,6 +92,11 @@ type PreviewDraft = {
   colorField: string;
   sizeField: string;
   goalField: string;
+  sourceField: string;
+  targetField: string;
+  edgeWeightField: string;
+  nodeLabelField: string;
+  groupField: string;
   partitionFields: string;
   maxRows: string;
 };
@@ -95,6 +115,7 @@ const CHART_TYPES: Array<{ value: ChartType; label: string }> = [
   { value: 'donut', label: 'Donut' },
   { value: 'sunburst', label: 'Sunburst' },
   { value: 'treemap', label: 'Treemap' },
+  { value: 'graph', label: 'Graph' },
   { value: 'metric', label: 'Metric' },
   { value: 'goal', label: 'Goal' },
   { value: 'table', label: 'Table' }
@@ -217,6 +238,7 @@ function Preview({
         {spec.chartType === 'metric' || spec.chartType === 'goal' ? <MetricPreview payload={payload} /> : null}
         {spec.chartType === 'table' ? <DataTable payload={payload} /> : null}
         {spec.chartType === 'heatmap' ? <HeatmapPreview payload={payload} /> : null}
+        {spec.chartType === 'graph' ? <GraphPreview payload={payload} /> : null}
         {isPartitionChart(spec.chartType) ? <PartitionPreview payload={payload} /> : null}
         {isXyChart(spec.chartType) ? <XyChartPreview payload={payload} /> : null}
       </section>
@@ -275,6 +297,11 @@ function ControlPanel({
         <FieldSelect label="Color" value={draft.colorField} fields={allFields} disabled={disabled} onChange={value => onChange({ colorField: value })} />
         <FieldSelect label="Size" value={draft.sizeField} fields={numericFields.length ? numericFields : allFields} disabled={disabled} onChange={value => onChange({ sizeField: value })} />
         <FieldSelect label="Goal" value={draft.goalField} fields={numericFields.length ? numericFields : allFields} disabled={disabled} onChange={value => onChange({ goalField: value })} />
+        <FieldSelect label="Source" value={draft.sourceField} fields={allFields} disabled={disabled} onChange={value => onChange({ sourceField: value })} />
+        <FieldSelect label="Target" value={draft.targetField} fields={allFields} disabled={disabled} onChange={value => onChange({ targetField: value })} />
+        <FieldSelect label="Edge weight" value={draft.edgeWeightField} fields={numericFields.length ? numericFields : allFields} disabled={disabled} onChange={value => onChange({ edgeWeightField: value })} />
+        <FieldSelect label="Node label" value={draft.nodeLabelField} fields={allFields} disabled={disabled} onChange={value => onChange({ nodeLabelField: value })} />
+        <FieldSelect label="Group" value={draft.groupField} fields={allFields} disabled={disabled} onChange={value => onChange({ groupField: value })} />
         <label>
           <span>Max rows</span>
           <input type="number" min="1" max="5000" value={draft.maxRows} disabled={disabled} onChange={event => onChange({ maxRows: event.target.value })} />
@@ -439,6 +466,70 @@ function PartitionPreview({ payload }: { payload: Payload }) {
   );
 }
 
+type GraphNode = SimulationNodeDatum & {
+  id: string;
+  label: string;
+  group: string;
+  degree: number;
+};
+
+type GraphLink = SimulationLinkDatum<GraphNode> & {
+  source: string | GraphNode;
+  target: string | GraphNode;
+  weight: number;
+};
+
+function GraphPreview({ payload }: { payload: Payload }) {
+  const graph = useMemo(() => buildGraphLayout(payload), [payload]);
+  if (!graph.nodes.length || !graph.links.length) {
+    return <StateMessage title="No graph edges" detail="Use a query with source and target columns to render a graph." />;
+  }
+
+  return (
+    <div className="graphWrap">
+      <svg viewBox="0 0 960 520" role="img" aria-label={payload.spec.title}>
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" />
+          </marker>
+        </defs>
+        <g className="graphLinks">
+          {graph.links.map((link, index) => {
+            const source = asGraphNode(link.source);
+            const target = asGraphNode(link.target);
+            return (
+              <line
+                key={`${source.id}:${target.id}:${index}`}
+                x1={source.x}
+                y1={source.y}
+                x2={target.x}
+                y2={target.y}
+                strokeWidth={Math.max(1, Math.min(8, Math.sqrt(link.weight)))}
+              >
+                <title>{`${source.label} -> ${target.label}: ${formatValue(link.weight)}`}</title>
+              </line>
+            );
+          })}
+        </g>
+        <g className="graphNodes">
+          {graph.nodes.map(node => (
+            <g key={node.id} transform={`translate(${node.x || 0} ${node.y || 0})`}>
+              <circle r={Math.max(8, Math.min(26, 7 + Math.sqrt(node.degree) * 4))} fill={graph.colorByGroup.get(node.group) || '#2f7f9f'} />
+              <text y={-14}>{node.label}</text>
+              <title>{`${node.label}${node.group !== 'default' ? ` (${node.group})` : ''}`}</title>
+            </g>
+          ))}
+        </g>
+      </svg>
+      <div className="graphLegend">
+        <span>{graph.nodes.length.toLocaleString()} nodes</span>
+        <span>{graph.links.length.toLocaleString()} edges</span>
+        {payload.spec.edgeWeightField ? <span>weighted by {payload.spec.edgeWeightField}</span> : null}
+      </div>
+    </div>
+  );
+}
+
 function MetricPreview({ payload }: { payload: Payload }) {
   const yField = payload.spec.valueField || payload.spec.yField || payload.columns.find(column => isNumericType(column.type))?.name || payload.columns[0]?.name;
   const goalField = payload.spec.goalField;
@@ -515,6 +606,11 @@ function draftFromPayload(payload: Payload): PreviewDraft {
     colorField: payload.spec.colorField || '',
     sizeField: payload.spec.sizeField || '',
     goalField: payload.spec.goalField || '',
+    sourceField: payload.spec.sourceField || '',
+    targetField: payload.spec.targetField || '',
+    edgeWeightField: payload.spec.edgeWeightField || '',
+    nodeLabelField: payload.spec.nodeLabelField || '',
+    groupField: payload.spec.groupField || '',
     partitionFields: (payload.spec.partitionFields || []).join(', '),
     maxRows: String(Math.max(payload.rowCount || 1, 1))
   };
@@ -534,6 +630,11 @@ function toolArgsFromDraft(draft: PreviewDraft) {
     colorField: draft.colorField,
     sizeField: draft.sizeField,
     goalField: draft.goalField,
+    sourceField: draft.sourceField,
+    targetField: draft.targetField,
+    edgeWeightField: draft.edgeWeightField,
+    nodeLabelField: draft.nodeLabelField,
+    groupField: draft.groupField,
     partitionFields: draft.partitionFields
       .split(',')
       .map(field => field.trim())
@@ -580,6 +681,74 @@ function isPartitionChart(chartType: Payload['spec']['chartType']) {
 function isStackedChart(chartType: Payload['spec']['chartType']) {
   return ['stacked_bar', 'normalized_stacked_bar', 'stacked_area'].includes(chartType);
 }
+
+function buildGraphLayout(payload: Payload) {
+  const { rows, spec, columns } = payload;
+  const dimensionFields = columns.filter(column => !isNumericType(column.type)).map(column => column.name);
+  const numericField = columns.find(column => isNumericType(column.type))?.name;
+  const sourceField = spec.sourceField || spec.xField || dimensionFields[0] || columns[0]?.name;
+  const targetField = spec.targetField || spec.seriesField || dimensionFields.find(field => field !== sourceField) || columns[1]?.name || sourceField;
+  const weightField = spec.edgeWeightField || spec.valueField || spec.yField || numericField;
+  const groupField = spec.groupField || spec.colorField;
+  const labelField = spec.nodeLabelField;
+  const nodeMap = new Map<string, GraphNode>();
+  const links: GraphLink[] = [];
+
+  for (const row of rows.slice(0, 600)) {
+    const sourceId = String(row[sourceField] ?? '').trim();
+    const targetId = String(row[targetField] ?? '').trim();
+    if (!sourceId || !targetId) continue;
+    const source = getGraphNode(nodeMap, sourceId, labelField ? row[labelField] : undefined, groupField ? row[groupField] : undefined);
+    const target = getGraphNode(nodeMap, targetId, undefined, groupField ? row[groupField] : undefined);
+    const weight = weightField ? Number(row[weightField] ?? 1) : 1;
+    source.degree += 1;
+    target.degree += 1;
+    links.push({ source: source.id, target: target.id, weight: Number.isFinite(weight) && weight > 0 ? weight : 1 });
+  }
+
+  const nodes = [...nodeMap.values()].slice(0, 320);
+  const nodeIds = new Set(nodes.map(node => node.id));
+  const visibleLinks = links.filter(link => nodeIds.has(String(link.source)) && nodeIds.has(String(link.target))).slice(0, 900);
+  const simulation = forceSimulation<GraphNode>(nodes)
+    .force('link', forceLink<GraphNode, GraphLink>(visibleLinks).id(node => node.id).distance(link => Math.max(42, 130 - Math.min(80, link.weight * 4))))
+    .force('charge', forceManyBody().strength(-210))
+    .force('collide', forceCollide<GraphNode>().radius(node => Math.max(16, Math.min(34, 13 + Math.sqrt(node.degree) * 5))))
+    .force('center', forceCenter(480, 250))
+    .stop();
+
+  for (let index = 0; index < 180; index += 1) simulation.tick();
+
+  for (const node of nodes) {
+    node.x = Math.max(28, Math.min(932, node.x || 480));
+    node.y = Math.max(28, Math.min(492, node.y || 250));
+  }
+
+  const groups = [...new Set(nodes.map(node => node.group))];
+  const colorByGroup = new Map(groups.map((group, index) => [group, graphPalette[index % graphPalette.length]]));
+  return { nodes, links: visibleLinks, colorByGroup };
+}
+
+function getGraphNode(nodeMap: Map<string, GraphNode>, id: string, label?: unknown, group?: unknown) {
+  const existing = nodeMap.get(id);
+  if (existing) {
+    if (group !== undefined && existing.group === 'default') existing.group = String(group || 'default');
+    return existing;
+  }
+  const node: GraphNode = {
+    id,
+    label: String(label || id),
+    group: String(group || 'default'),
+    degree: 0
+  };
+  nodeMap.set(id, node);
+  return node;
+}
+
+function asGraphNode(value: string | GraphNode): GraphNode {
+  return typeof value === 'string' ? { id: value, label: value, group: 'default', degree: 1 } : value;
+}
+
+const graphPalette = ['#2f7f9f', '#7a5ea8', '#2f8f68', '#c26f2d', '#b84a62', '#5f7485', '#986f0b', '#4f7ec7'];
 
 function normalizeX(value: unknown) {
   if (value instanceof Date) return value.getTime();

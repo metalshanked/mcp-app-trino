@@ -200,6 +200,61 @@ button {
   max-height: 520px;
 }
 
+.graphWrap {
+  min-height: 460px;
+}
+
+.graphWrap svg {
+  width: 100%;
+  min-height: 460px;
+  border-radius: 6px;
+  background:
+    linear-gradient(#eef4f7 1px, transparent 1px),
+    linear-gradient(90deg, #eef4f7 1px, transparent 1px),
+    #ffffff;
+  background-size: 32px 32px;
+}
+
+.graphLinks line {
+  stroke: #7d95a7;
+  stroke-opacity: 0.54;
+  marker-end: url(#arrow);
+}
+
+.graphNodes circle {
+  stroke: #ffffff;
+  stroke-width: 2.5px;
+  filter: drop-shadow(0 2px 4px rgba(23, 33, 43, 0.22));
+}
+
+.graphNodes text {
+  fill: #17212b;
+  paint-order: stroke;
+  stroke: #ffffff;
+  stroke-width: 4px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  text-anchor: middle;
+  font-size: 12px;
+  font-weight: 680;
+}
+
+.graphLegend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.graphLegend span {
+  border: 1px solid #d8e2ea;
+  border-radius: 999px;
+  background: #f7f9fb;
+  color: #536474;
+  padding: 4px 9px;
+  font-size: 12px;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
