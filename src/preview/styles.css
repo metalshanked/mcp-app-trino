@@ -46,12 +46,128 @@ p {
   text-transform: uppercase;
 }
 
+.controlPanel {
+  margin-bottom: 14px;
+  border: 1px solid #d8e2ea;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 12px;
+}
+
+.controlGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+label {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+}
+
+label span {
+  color: #536474;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #c9d6e2;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #17212b;
+  font: inherit;
+  font-size: 13px;
+}
+
+input,
+select {
+  height: 34px;
+  padding: 0 9px;
+}
+
+textarea {
+  min-height: 112px;
+  padding: 9px;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+  line-height: 1.45;
+}
+
+input:disabled,
+select:disabled,
+textarea:disabled,
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.wide {
+  grid-column: span 2;
+}
+
+.sqlEditor {
+  margin-top: 10px;
+  border: 1px solid #e0e8ef;
+  border-radius: 8px;
+  background: #f8fbfd;
+  padding: 9px 10px;
+}
+
+.controlActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 10px;
+  color: #536474;
+  font-size: 12px;
+}
+
+.controlError {
+  color: #b42318;
+}
+
+button {
+  flex: 0 0 auto;
+  height: 34px;
+  border: 1px solid #0f6b7f;
+  border-radius: 6px;
+  background: #0f6b7f;
+  color: #ffffff;
+  padding: 0 14px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
 .chartPanel {
+  position: relative;
   min-height: 460px;
   border: 1px solid #d8e2ea;
   border-radius: 8px;
   background: #ffffff;
   padding: 14px;
+}
+
+.refreshOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+  color: #24435c;
+  font-size: 13px;
+  font-weight: 650;
 }
 
 .chartWrap {
@@ -141,4 +257,32 @@ pre {
 
 .state h1 {
   font-size: 18px;
+}
+
+@media (max-width: 760px) {
+  .app {
+    padding: 12px;
+  }
+
+  .header {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .controlGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .wide {
+    grid-column: auto;
+  }
+
+  .controlActions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  button {
+    width: 100%;
+  }
 }

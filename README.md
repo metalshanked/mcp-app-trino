@@ -8,6 +8,7 @@ MCP Apps-compliant Trino and Starburst query visualization server. It exposes no
 - Read-only guard for `SELECT`, `WITH`, `SHOW`, `DESCRIBE`, and `EXPLAIN`.
 - Discovery tools: `list_catalogs`, `list_schemas`, `list_tables`, `get_table_schema`, `explain_query`.
 - MCP Apps UI tool: `visualize_query`.
+- MCP Apps preview controls can call back through the host bridge to refresh the query, switch chart types, remap fields, adjust row limits, and replace the chart without a new chat turn.
 - Elastic Charts previews for bar, stacked bar, normalized stacked bar, line, area, stacked area, scatter, bubble, heatmap, pie, donut, sunburst, treemap, metric, goal, and table views.
 - Stdio transport compatible with Rubberband, Claude Desktop, Cursor, and other MCP clients.
 
@@ -16,6 +17,7 @@ MCP Apps-compliant Trino and Starburst query visualization server. It exposes no
 ### `visualize_query`
 
 Executes a read-only Trino/Starburst SQL query and returns an MCP App preview rendered with Elastic Charts.
+In MCP Apps clients that expose server tool calls to the iframe, the preview also renders controls for editing the SQL, changing chart type, remapping fields, and fetching an updated `visualize_query` result through the bridge.
 
 Inputs:
 

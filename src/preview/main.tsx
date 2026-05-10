@@ -63,9 +63,48 @@ type Payload = {
   generatedAt: string;
 };
 
+type ChartType = Payload['spec']['chartType'];
+type PreviewDraft = {
+  sql: string;
+  chartType: ChartType;
+  title: string;
+  xField: string;
+  yField: string;
+  seriesField: string;
+  valueField: string;
+  rowField: string;
+  columnField: string;
+  colorField: string;
+  sizeField: string;
+  goalField: string;
+  partitionFields: string;
+  maxRows: string;
+};
+
+const CHART_TYPES: Array<{ value: ChartType; label: string }> = [
+  { value: 'bar', label: 'Bar' },
+  { value: 'stacked_bar', label: 'Stacked bar' },
+  { value: 'normalized_stacked_bar', label: '100% stacked bar' },
+  { value: 'line', label: 'Line' },
+  { value: 'area', label: 'Area' },
+  { value: 'stacked_area', label: 'Stacked area' },
+  { value: 'scatter', label: 'Scatter' },
+  { value: 'bubble', label: 'Bubble' },
+  { value: 'heatmap', label: 'Heatmap' },
+  { value: 'pie', label: 'Pie' },
+  { value: 'donut', label: 'Donut' },
+  { value: 'sunburst', label: 'Sunburst' },
+  { value: 'treemap', label: 'Treemap' },
+  { value: 'metric', label: 'Metric' },
+  { value: 'goal', label: 'Goal' },
+  { value: 'table', label: 'Table' }
+];
+
 function App() {
   const [payload, setPayload] = useState<Payload | null>(null);
+  const [bridge, setBridge] = useState<McpApp | null>(null);
   const [isConnected, setIsConnected] = useState(false);
+  const [serverToolsAvailable, setServerToolsAvailable] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
@@ -79,7 +118,11 @@ function App() {
     void app
       .connect(new PostMessageTransport(window.parent, window.parent))
       .then(() => {
-        if (active) setIsConnected(true);
+        if (active) {
+          setBridge(app);
+          setServerToolsAvailable(true);
+          setIsConnected(true);
+        }
       })
       .catch(err => {
         if (active) setError(err instanceof Error ? err : new Error(String(err)));
@@ -93,11 +136,57 @@ function App() {
   if (!isConnected) return <StateMessage title="Connecting to host" />;
   if (!payload) return <StateMessage title="Waiting for query result" />;
 
-  return <Preview payload={payload} />;
+  return <Preview payload={payload} bridge={bridge} serverToolsAvailable={serverToolsAvailable} onPayload={setPayload} />;
 }
 
-function Preview({ payload }: { payload: Payload }) {
+function Preview({
+  payload,
+  bridge,
+  serverToolsAvailable,
+  onPayload
+}: {
+  payload: Payload;
+  bridge: McpApp | null;
+  serverToolsAvailable: boolean;
+  onPayload: (payload: Payload) => void;
+}) {
   const spec = payload.spec;
+  const [draft, setDraft] = useState(() => draftFromPayload(payload));
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [controlError, setControlError] = useState('');
+
+  useEffect(() => {
+    setDraft(draftFromPayload(payload));
+    setControlError('');
+  }, [payload]);
+
+  async function refreshPreview(overrides: Partial<PreviewDraft> = {}) {
+    const nextDraft = { ...draft, ...overrides };
+    setDraft(nextDraft);
+
+    if (!bridge || !serverToolsAvailable) {
+      setControlError('This host does not expose server tool calls to MCP Apps.');
+      return;
+    }
+
+    setIsRefreshing(true);
+    setControlError('');
+    try {
+      const result = await bridge.callServerTool({
+        name: 'visualize_query',
+        arguments: toolArgsFromDraft(nextDraft)
+      });
+      if (result.isError) throw new Error(toolResultText(result) || 'The server returned an error.');
+      const nextPayload = extractPayload(result);
+      if (!nextPayload) throw new Error('The server returned a result without a Trino visualization payload.');
+      onPayload(nextPayload);
+    } catch (err) {
+      setControlError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsRefreshing(false);
+    }
+  }
+
   return (
     <main className="app">
       <header className="header">
@@ -112,7 +201,19 @@ function Preview({ payload }: { payload: Payload }) {
         <span className="badge">{spec.chartType}</span>
       </header>
 
+      <ControlPanel
+        payload={payload}
+        draft={draft}
+        disabled={isRefreshing}
+        serverToolsAvailable={serverToolsAvailable}
+        error={controlError}
+        onChange={updates => setDraft(current => ({ ...current, ...updates }))}
+        onChartTypeChange={chartType => void refreshPreview({ chartType })}
+        onRefresh={() => void refreshPreview()}
+      />
+
       <section className="chartPanel">
+        {isRefreshing ? <div className="refreshOverlay">Refreshing preview...</div> : null}
         {spec.chartType === 'metric' || spec.chartType === 'goal' ? <MetricPreview payload={payload} /> : null}
         {spec.chartType === 'table' ? <DataTable payload={payload} /> : null}
         {spec.chartType === 'heatmap' ? <HeatmapPreview payload={payload} /> : null}
@@ -125,6 +226,102 @@ function Preview({ payload }: { payload: Payload }) {
         <pre>{payload.sql}</pre>
       </details>
     </main>
+  );
+}
+
+function ControlPanel({
+  payload,
+  draft,
+  disabled,
+  serverToolsAvailable,
+  error,
+  onChange,
+  onChartTypeChange,
+  onRefresh
+}: {
+  payload: Payload;
+  draft: PreviewDraft;
+  disabled: boolean;
+  serverToolsAvailable: boolean;
+  error: string;
+  onChange: (updates: Partial<PreviewDraft>) => void;
+  onChartTypeChange: (chartType: ChartType) => void;
+  onRefresh: () => void;
+}) {
+  const allFields = payload.columns.map(column => column.name);
+  const numericFields = payload.columns.filter(column => isNumericType(column.type)).map(column => column.name);
+  const selectDisabled = disabled || !serverToolsAvailable;
+  return (
+    <section className="controlPanel" aria-label="Visualization controls">
+      <div className="controlGrid">
+        <label>
+          <span>Chart</span>
+          <select value={draft.chartType} disabled={selectDisabled} onChange={event => onChartTypeChange(event.target.value as ChartType)}>
+            {CHART_TYPES.map(option => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>Title</span>
+          <input value={draft.title} disabled={disabled} onChange={event => onChange({ title: event.target.value })} />
+        </label>
+        <FieldSelect label="X field" value={draft.xField} fields={allFields} disabled={disabled} onChange={value => onChange({ xField: value })} />
+        <FieldSelect label="Y field" value={draft.yField} fields={numericFields.length ? numericFields : allFields} disabled={disabled} onChange={value => onChange({ yField: value })} />
+        <FieldSelect label="Series" value={draft.seriesField} fields={allFields} disabled={disabled} onChange={value => onChange({ seriesField: value })} />
+        <FieldSelect label="Value" value={draft.valueField} fields={numericFields.length ? numericFields : allFields} disabled={disabled} onChange={value => onChange({ valueField: value })} />
+        <FieldSelect label="Row" value={draft.rowField} fields={allFields} disabled={disabled} onChange={value => onChange({ rowField: value })} />
+        <FieldSelect label="Column" value={draft.columnField} fields={allFields} disabled={disabled} onChange={value => onChange({ columnField: value })} />
+        <FieldSelect label="Color" value={draft.colorField} fields={allFields} disabled={disabled} onChange={value => onChange({ colorField: value })} />
+        <FieldSelect label="Size" value={draft.sizeField} fields={numericFields.length ? numericFields : allFields} disabled={disabled} onChange={value => onChange({ sizeField: value })} />
+        <FieldSelect label="Goal" value={draft.goalField} fields={numericFields.length ? numericFields : allFields} disabled={disabled} onChange={value => onChange({ goalField: value })} />
+        <label>
+          <span>Max rows</span>
+          <input type="number" min="1" max="5000" value={draft.maxRows} disabled={disabled} onChange={event => onChange({ maxRows: event.target.value })} />
+        </label>
+        <label className="wide">
+          <span>Partition fields</span>
+          <input value={draft.partitionFields} disabled={disabled} placeholder="category, subcategory" onChange={event => onChange({ partitionFields: event.target.value })} />
+        </label>
+      </div>
+
+      <details className="sqlEditor">
+        <summary>Edit query</summary>
+        <textarea value={draft.sql} disabled={disabled} spellCheck={false} onChange={event => onChange({ sql: event.target.value })} />
+      </details>
+
+      <div className="controlActions">
+        {!serverToolsAvailable ? <span>Host bridge is read-only; controls cannot fetch new results.</span> : null}
+        {error ? <span className="controlError">{error}</span> : null}
+        <button disabled={disabled || !serverToolsAvailable} onClick={onRefresh}>{disabled ? 'Refreshing...' : 'Apply'}</button>
+      </div>
+    </section>
+  );
+}
+
+function FieldSelect({
+  label,
+  value,
+  fields,
+  disabled,
+  onChange
+}: {
+  label: string;
+  value: string;
+  fields: string[];
+  disabled: boolean;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label>
+      <span>{label}</span>
+      <select value={value} disabled={disabled} onChange={event => onChange(event.target.value)}>
+        <option value="">Auto</option>
+        {fields.map(field => (
+          <option key={field} value={field}>{field}</option>
+        ))}
+      </select>
+    </label>
   );
 }
 
@@ -302,6 +499,70 @@ function extractPayload(result: unknown): Payload | null {
   if (isPayload(candidate?.structuredContent)) return candidate.structuredContent;
   if (isPayload(result)) return result;
   return null;
+}
+
+function draftFromPayload(payload: Payload): PreviewDraft {
+  return {
+    sql: payload.sql,
+    chartType: payload.spec.chartType,
+    title: payload.spec.title,
+    xField: payload.spec.xField || '',
+    yField: payload.spec.yField || '',
+    seriesField: payload.spec.seriesField || '',
+    valueField: payload.spec.valueField || '',
+    rowField: payload.spec.rowField || '',
+    columnField: payload.spec.columnField || '',
+    colorField: payload.spec.colorField || '',
+    sizeField: payload.spec.sizeField || '',
+    goalField: payload.spec.goalField || '',
+    partitionFields: (payload.spec.partitionFields || []).join(', '),
+    maxRows: String(Math.max(payload.rowCount || 1, 1))
+  };
+}
+
+function toolArgsFromDraft(draft: PreviewDraft) {
+  return pruneEmpty({
+    sql: draft.sql,
+    chartType: draft.chartType,
+    title: draft.title,
+    xField: draft.xField,
+    yField: draft.yField,
+    seriesField: draft.seriesField,
+    valueField: draft.valueField,
+    rowField: draft.rowField,
+    columnField: draft.columnField,
+    colorField: draft.colorField,
+    sizeField: draft.sizeField,
+    goalField: draft.goalField,
+    partitionFields: draft.partitionFields
+      .split(',')
+      .map(field => field.trim())
+      .filter(Boolean),
+    maxRows: clampInteger(Number(draft.maxRows), 1, 5000, 1000)
+  });
+}
+
+function pruneEmpty(values: Record<string, unknown>) {
+  return Object.fromEntries(
+    Object.entries(values).filter(([, value]) => {
+      if (value === '' || value === undefined || value === null) return false;
+      if (Array.isArray(value) && !value.length) return false;
+      return true;
+    })
+  );
+}
+
+function clampInteger(value: number, min: number, max: number, fallback: number) {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.min(max, Math.max(min, Math.trunc(value)));
+}
+
+function toolResultText(result: unknown) {
+  const content = (result as { content?: Array<{ type?: string; text?: string }> }).content || [];
+  return content
+    .filter(item => item.type === 'text' && item.text)
+    .map(item => item.text)
+    .join('\n');
 }
 
 function isPayload(value: unknown): value is Payload {
