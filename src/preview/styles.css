@@ -204,9 +204,30 @@ button {
   min-height: 460px;
 }
 
-.graphWrap svg {
-  width: 100%;
-  min-height: 460px;
+.graphToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.graphToolbar button,
+.graphInspector button,
+.graphGroups button {
+  border-color: #c9d6e2;
+  background: #ffffff;
+  color: #24435c;
+}
+
+.graphSearch {
+  flex: 1 1 220px;
+  max-width: 340px;
+}
+
+.graphCanvas {
+  overflow: hidden;
+  border: 1px solid #d8e2ea;
   border-radius: 6px;
   background:
     linear-gradient(#eef4f7 1px, transparent 1px),
@@ -215,16 +236,52 @@ button {
   background-size: 32px 32px;
 }
 
+.graphWrap svg {
+  width: 100%;
+  min-height: 460px;
+  cursor: grab;
+  touch-action: none;
+}
+
+.graphWrap svg:active {
+  cursor: grabbing;
+}
+
 .graphLinks line {
   stroke: #7d95a7;
   stroke-opacity: 0.54;
   marker-end: url(#arrow);
 }
 
+.graphLinks line.dimmed {
+  stroke-opacity: 0.12;
+}
+
+.graphViewport {
+  transform-box: fill-box;
+}
+
+.graphNodes g {
+  cursor: pointer;
+}
+
 .graphNodes circle {
   stroke: #ffffff;
   stroke-width: 2.5px;
   filter: drop-shadow(0 2px 4px rgba(23, 33, 43, 0.22));
+}
+
+.graphNodes g.selected circle {
+  stroke: #17212b;
+  stroke-width: 4px;
+}
+
+.graphNodes g.pinned circle {
+  stroke: #b84a62;
+}
+
+.graphNodes g.dimmed {
+  opacity: 0.2;
 }
 
 .graphNodes text {
@@ -237,6 +294,11 @@ button {
   text-anchor: middle;
   font-size: 12px;
   font-weight: 680;
+  pointer-events: none;
+}
+
+.graphNodes text.hidden {
+  display: none;
 }
 
 .graphLegend {
@@ -252,6 +314,54 @@ button {
   background: #f7f9fb;
   color: #536474;
   padding: 4px 9px;
+  font-size: 12px;
+}
+
+.graphGroups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.graphGroups button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 9px;
+  font-size: 12px;
+}
+
+.graphGroups i {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.graphInspector {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  border: 1px solid #d8e2ea;
+  border-radius: 8px;
+  background: #f8fbfd;
+  padding: 9px 10px;
+  color: #536474;
+  font-size: 12px;
+}
+
+.graphInspector strong {
+  color: #17212b;
+  font-size: 13px;
+}
+
+.graphInspector button {
+  height: 28px;
+  margin-left: auto;
+  padding: 0 10px;
   font-size: 12px;
 }
 

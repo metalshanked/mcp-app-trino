@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App as McpApp, PostMessageTransport } from '@modelcontextprotocol/ext-apps';
+import { drag } from 'd3-drag';
 import {
   forceCenter,
   forceCollide,
@@ -10,6 +11,8 @@ import {
   type SimulationLinkDatum,
   type SimulationNodeDatum
 } from 'd3-force';
+import { select } from 'd3-selection';
+import { zoom, zoomIdentity, type ZoomBehavior } from 'd3-zoom';
 import {
   AreaSeries,
   Axis,
@@ -479,53 +482,91 @@ type GraphLink = SimulationLinkDatum<GraphNode> & {
   weight: number;
 };
 
+type GraphLayout = ReturnType<typeof buildGraphLayout>;
+
 function GraphPreview({ payload }: { payload: Payload }) {
   const graph = useMemo(() => buildGraphLayout(payload), [payload]);
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const zoomRef = useRef<ZoomBehavior<SVGSVGElement, unknown> | null>(null);
+  const [selectedNodeId, setSelectedNodeId] = useState('');
+  const [search, setSearch] = useState('');
+  const [showLabels, setShowLabels] = useState(true);
+  const [pinnedIds, setPinnedIds] = useState<Set<string>>(() => new Set());
+  const selectedNode = graph.nodes.find(node => node.id === selectedNodeId);
+  const visibleGroups = [...graph.colorByGroup.entries()].slice(0, 8);
+
+  useEffect(() => {
+    setSelectedNodeId('');
+    setPinnedIds(new Set());
+  }, [payload]);
+
+  useEffect(() => {
+    if (!svgRef.current || !graph.nodes.length || !graph.links.length) return;
+    const cleanup = renderInteractiveGraph(svgRef.current, graph, {
+      selectedNodeId,
+      search,
+      showLabels,
+      pinnedIds,
+      onSelectedNode: setSelectedNodeId,
+      onPinnedIds: setPinnedIds,
+      onZoomReady: behavior => {
+        zoomRef.current = behavior;
+      }
+    });
+    return cleanup;
+  }, [graph, pinnedIds, search, selectedNodeId, showLabels]);
+
+  function resetView() {
+    if (!svgRef.current || !zoomRef.current) return;
+    select(svgRef.current).call(zoomRef.current.transform, zoomIdentity);
+  }
+
+  function clearPins() {
+    setPinnedIds(new Set());
+  }
+
   if (!graph.nodes.length || !graph.links.length) {
     return <StateMessage title="No graph edges" detail="Use a query with source and target columns to render a graph." />;
   }
 
   return (
     <div className="graphWrap">
-      <svg viewBox="0 0 960 520" role="img" aria-label={payload.spec.title}>
-        <defs>
-          <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-            <path d="M 0 0 L 10 5 L 0 10 z" />
-          </marker>
-        </defs>
-        <g className="graphLinks">
-          {graph.links.map((link, index) => {
-            const source = asGraphNode(link.source);
-            const target = asGraphNode(link.target);
-            return (
-              <line
-                key={`${source.id}:${target.id}:${index}`}
-                x1={source.x}
-                y1={source.y}
-                x2={target.x}
-                y2={target.y}
-                strokeWidth={Math.max(1, Math.min(8, Math.sqrt(link.weight)))}
-              >
-                <title>{`${source.label} -> ${target.label}: ${formatValue(link.weight)}`}</title>
-              </line>
-            );
-          })}
-        </g>
-        <g className="graphNodes">
-          {graph.nodes.map(node => (
-            <g key={node.id} transform={`translate(${node.x || 0} ${node.y || 0})`}>
-              <circle r={Math.max(8, Math.min(26, 7 + Math.sqrt(node.degree) * 4))} fill={graph.colorByGroup.get(node.group) || '#2f7f9f'} />
-              <text y={-14}>{node.label}</text>
-              <title>{`${node.label}${node.group !== 'default' ? ` (${node.group})` : ''}`}</title>
-            </g>
-          ))}
-        </g>
-      </svg>
+      <div className="graphToolbar">
+        <label className="graphSearch">
+          <span>Find node</span>
+          <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search labels" />
+        </label>
+        <button type="button" onClick={resetView}>Reset view</button>
+        <button type="button" onClick={() => setShowLabels(value => !value)}>{showLabels ? 'Hide labels' : 'Show labels'}</button>
+        <button type="button" onClick={clearPins} disabled={!pinnedIds.size}>Clear pins</button>
+      </div>
+      <div className="graphCanvas">
+        <svg ref={svgRef} viewBox="0 0 960 520" role="img" aria-label={payload.spec.title} />
+      </div>
       <div className="graphLegend">
         <span>{graph.nodes.length.toLocaleString()} nodes</span>
         <span>{graph.links.length.toLocaleString()} edges</span>
+        <span>{pinnedIds.size.toLocaleString()} pinned</span>
         {payload.spec.edgeWeightField ? <span>weighted by {payload.spec.edgeWeightField}</span> : null}
       </div>
+      {visibleGroups.length ? (
+        <div className="graphGroups" aria-label="Graph groups">
+          {visibleGroups.map(([group, color]) => (
+            <button type="button" key={group} onClick={() => setSearch(group === 'default' ? '' : group)} title={`Filter by ${group}`}>
+              <i style={{ background: color }} />
+              <span>{group}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {selectedNode ? (
+        <aside className="graphInspector">
+          <strong>{selectedNode.label}</strong>
+          <span>{selectedNode.group !== 'default' ? selectedNode.group : 'node'}</span>
+          <span>{selectedNode.degree.toLocaleString()} connection{selectedNode.degree === 1 ? '' : 's'}</span>
+          <button type="button" onClick={() => setSelectedNodeId('')}>Clear selection</button>
+        </aside>
+      ) : null}
     </div>
   );
 }
@@ -726,6 +767,191 @@ function buildGraphLayout(payload: Payload) {
   const groups = [...new Set(nodes.map(node => node.group))];
   const colorByGroup = new Map(groups.map((group, index) => [group, graphPalette[index % graphPalette.length]]));
   return { nodes, links: visibleLinks, colorByGroup };
+}
+
+function renderInteractiveGraph(
+  svgElement: SVGSVGElement,
+  graph: GraphLayout,
+  options: {
+    selectedNodeId: string;
+    search: string;
+    showLabels: boolean;
+    pinnedIds: Set<string>;
+    onSelectedNode: (id: string) => void;
+    onPinnedIds: (ids: Set<string>) => void;
+    onZoomReady: (behavior: ZoomBehavior<SVGSVGElement, unknown>) => void;
+  }
+) {
+  const svg = select(svgElement);
+  svg.selectAll('*').remove();
+
+  const defs = svg.append('defs');
+  defs
+    .append('marker')
+    .attr('id', 'arrow')
+    .attr('viewBox', '0 0 10 10')
+    .attr('refX', 14)
+    .attr('refY', 5)
+    .attr('markerWidth', 6)
+    .attr('markerHeight', 6)
+    .attr('orient', 'auto-start-reverse')
+    .append('path')
+    .attr('d', 'M 0 0 L 10 5 L 0 10 z');
+
+  const viewport = svg.append('g').attr('class', 'graphViewport');
+  const searchTerm = options.search.trim().toLowerCase();
+  const selectedNeighbors = neighborSet(graph, options.selectedNodeId);
+  const matchesSearch = (node: GraphNode) => !searchTerm || node.label.toLowerCase().includes(searchTerm) || node.id.toLowerCase().includes(searchTerm) || node.group.toLowerCase().includes(searchTerm);
+  const isFocusNode = (node: GraphNode) =>
+    (!options.selectedNodeId && matchesSearch(node)) ||
+    node.id === options.selectedNodeId ||
+    selectedNeighbors.has(node.id);
+
+  for (const node of graph.nodes) {
+    if (options.pinnedIds.has(node.id)) {
+      node.fx = node.x;
+      node.fy = node.y;
+    } else {
+      node.fx = undefined;
+      node.fy = undefined;
+    }
+  }
+
+  const linkSelection = viewport
+    .append('g')
+    .attr('class', 'graphLinks')
+    .selectAll<SVGLineElement, GraphLink>('line')
+    .data(graph.links)
+    .join('line')
+    .attr('stroke-width', link => Math.max(1, Math.min(8, Math.sqrt(link.weight))))
+    .classed('dimmed', link => {
+      const source = asGraphNode(link.source);
+      const target = asGraphNode(link.target);
+      return Boolean(options.selectedNodeId && source.id !== options.selectedNodeId && target.id !== options.selectedNodeId);
+    });
+
+  linkSelection.append('title').text(link => {
+    const source = asGraphNode(link.source);
+    const target = asGraphNode(link.target);
+    return `${source.label} -> ${target.label}: ${formatValue(link.weight)}`;
+  });
+
+  const nodeSelection = viewport
+    .append('g')
+    .attr('class', 'graphNodes')
+    .selectAll<SVGGElement, GraphNode>('g')
+    .data(graph.nodes)
+    .join('g')
+    .attr('tabindex', 0)
+    .attr('role', 'button')
+    .classed('selected', node => node.id === options.selectedNodeId)
+    .classed('pinned', node => options.pinnedIds.has(node.id))
+    .classed('dimmed', node => !isFocusNode(node))
+    .on('click', (event, node) => {
+      event.stopPropagation();
+      options.onSelectedNode(node.id === options.selectedNodeId ? '' : node.id);
+    })
+    .on('dblclick', (event, node) => {
+      event.stopPropagation();
+      const next = new Set(options.pinnedIds);
+      if (next.has(node.id)) {
+        next.delete(node.id);
+        node.fx = undefined;
+        node.fy = undefined;
+      } else {
+        next.add(node.id);
+        node.fx = node.x;
+        node.fy = node.y;
+      }
+      options.onPinnedIds(next);
+    })
+    .on('keydown', (event, node) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        options.onSelectedNode(node.id === options.selectedNodeId ? '' : node.id);
+      }
+    });
+
+  nodeSelection
+    .append('circle')
+    .attr('r', node => Math.max(8, Math.min(26, 7 + Math.sqrt(node.degree) * 4)))
+    .attr('fill', node => graph.colorByGroup.get(node.group) || '#2f7f9f');
+
+  nodeSelection
+    .append('text')
+    .attr('y', -14)
+    .classed('hidden', !options.showLabels)
+    .text(node => truncateLabel(node.label, 24));
+
+  nodeSelection.append('title').text(node => `${node.label}${node.group !== 'default' ? ` (${node.group})` : ''}`);
+
+  const simulation = forceSimulation<GraphNode>(graph.nodes)
+    .force('link', forceLink<GraphNode, GraphLink>(graph.links).id(node => node.id).distance(link => Math.max(42, 130 - Math.min(80, link.weight * 4))))
+    .force('charge', forceManyBody().strength(-230))
+    .force('collide', forceCollide<GraphNode>().radius(node => Math.max(16, Math.min(34, 13 + Math.sqrt(node.degree) * 5))))
+    .force('center', forceCenter(480, 250))
+    .alpha(0.35);
+
+  const dragBehavior = drag<SVGGElement, GraphNode>()
+    .on('start', (event, node) => {
+      event.sourceEvent.stopPropagation();
+      if (!event.active) simulation.alphaTarget(0.22).restart();
+      node.fx = node.x;
+      node.fy = node.y;
+    })
+    .on('drag', (event, node) => {
+      node.fx = Math.max(20, Math.min(940, event.x));
+      node.fy = Math.max(20, Math.min(500, event.y));
+    })
+    .on('end', (event, node) => {
+      if (!event.active) simulation.alphaTarget(0);
+      const next = new Set(options.pinnedIds);
+      next.add(node.id);
+      options.onPinnedIds(next);
+    });
+  nodeSelection.call(dragBehavior);
+
+  const zoomBehavior = zoom<SVGSVGElement, unknown>()
+    .scaleExtent([0.25, 5])
+    .on('zoom', event => {
+      viewport.attr('transform', event.transform.toString());
+    });
+  svg.call(zoomBehavior).on('dblclick.zoom', null).on('click', () => options.onSelectedNode(''));
+  options.onZoomReady(zoomBehavior);
+
+  simulation.on('tick', () => {
+    for (const node of graph.nodes) {
+      node.x = Math.max(18, Math.min(942, node.x || 480));
+      node.y = Math.max(18, Math.min(502, node.y || 250));
+    }
+    linkSelection
+      .attr('x1', link => asGraphNode(link.source).x || 0)
+      .attr('y1', link => asGraphNode(link.source).y || 0)
+      .attr('x2', link => asGraphNode(link.target).x || 0)
+      .attr('y2', link => asGraphNode(link.target).y || 0);
+    nodeSelection.attr('transform', node => `translate(${node.x || 0} ${node.y || 0})`);
+  });
+
+  return () => {
+    simulation.stop();
+    svg.on('.zoom', null);
+  };
+}
+
+function neighborSet(graph: GraphLayout, nodeId: string) {
+  const neighbors = new Set<string>();
+  if (!nodeId) return neighbors;
+  for (const link of graph.links) {
+    const source = asGraphNode(link.source);
+    const target = asGraphNode(link.target);
+    if (source.id === nodeId) neighbors.add(target.id);
+    if (target.id === nodeId) neighbors.add(source.id);
+  }
+  return neighbors;
+}
+
+function truncateLabel(value: string, maxLength: number) {
+  return value.length > maxLength ? `${value.slice(0, maxLength - 1)}...` : value;
 }
 
 function getGraphNode(nodeMap: Map<string, GraphNode>, id: string, label?: unknown, group?: unknown) {

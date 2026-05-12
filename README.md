@@ -9,7 +9,7 @@ MCP Apps-compliant Trino and Starburst query visualization server. It exposes no
 - Discovery tools: `list_catalogs`, `list_schemas`, `list_tables`, `get_table_schema`, `explain_query`.
 - MCP Apps UI tool: `visualize_query`.
 - MCP Apps preview controls can call back through the host bridge to refresh the query, switch chart types, remap fields, adjust row limits, and replace the chart without a new chat turn.
-- Elastic Charts previews for bar, stacked bar, normalized stacked bar, line, area, stacked area, scatter, bubble, heatmap, pie, donut, sunburst, treemap, metric, goal, and table views, plus force-directed graph/network views.
+- Elastic Charts previews for bar, stacked bar, normalized stacked bar, line, area, stacked area, scatter, bubble, heatmap, pie, donut, sunburst, treemap, metric, goal, and table views, plus force-directed graph/network views with pan, zoom, search, selection, node dragging, and pinning.
 - Stdio transport compatible with Rubberband, Claude Desktop, Cursor, and other MCP clients.
 
 ## Tools
@@ -451,6 +451,7 @@ LIMIT 200
 ```
 
 Use `chartType: "graph"`, `sourceField: "source"`, `targetField: "target"`, and `edgeWeightField: "weight"`.
+In MCP Apps clients with iframe tool-call support, graph previews are interactive: drag the canvas to pan, wheel or pinch to zoom, drag a node to pin it, double-click a node to toggle pinning, search labels/groups, select a node to highlight its neighbors, and reset the view from the toolbar.
 
 ## License
 

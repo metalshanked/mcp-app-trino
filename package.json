@@ -25,7 +25,10 @@
     "@modelcontextprotocol/ext-apps": "^1.7.1",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@vitejs/plugin-react": "^5.1.1",
+    "d3-drag": "^3.0.0",
     "d3-force": "^3.0.0",
+    "d3-selection": "^3.0.0",
+    "d3-zoom": "^3.0.0",
     "undici": "^7.25.0",
     "vite-plugin-singlefile": "^2.3.2",
     "zod": "^4.1.13"
@@ -34,7 +37,10 @@
     "d3-scale": "4.0.2"
   },
   "devDependencies": {
+    "@types/d3-drag": "^3.0.7",
     "@types/d3-force": "^3.0.10",
+    "@types/d3-selection": "^3.0.11",
+    "@types/d3-zoom": "^3.0.8",
     "@types/node": "^25.0.3",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
