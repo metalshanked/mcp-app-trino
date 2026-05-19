@@ -175,6 +175,65 @@ button {
   min-height: 420px;
 }
 
+.dashboardGrid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.dashboardPanel {
+  min-width: 0;
+  border: 1px solid #d8e2ea;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 12px;
+}
+
+.dashboardPanel.span-full {
+  grid-column: span 12;
+}
+
+.dashboardPanel.span-half {
+  grid-column: span 6;
+}
+
+.dashboardPanel.span-third {
+  grid-column: span 4;
+}
+
+.panelHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.panelHeader h2 {
+  margin: 0;
+  color: #17212b;
+  font-size: 15px;
+  font-weight: 680;
+  letter-spacing: 0;
+}
+
+.panelHeader p {
+  margin-top: 3px;
+}
+
+.panelSql {
+  margin-top: 12px;
+}
+
+.panelSql:first-of-type {
+  margin-top: 10px;
+}
+
+.panelSql strong {
+  color: #17212b;
+  font-size: 13px;
+}
+
 .metric {
   min-height: 420px;
   display: flex;
@@ -439,6 +498,16 @@ pre {
   }
 
   .wide {
+    grid-column: auto;
+  }
+
+  .dashboardGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboardPanel.span-full,
+  .dashboardPanel.span-half,
+  .dashboardPanel.span-third {
     grid-column: auto;
   }
 

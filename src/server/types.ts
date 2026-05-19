@@ -53,6 +53,20 @@ export type ChartSpec = {
   partitionFields?: string[];
 };
 
+export type DashboardPanelWidth = 'full' | 'half' | 'third';
+
+export type DashboardPanelPayload = {
+  id: string;
+  sql: string;
+  spec: ChartSpec;
+  columns: TrinoColumn[];
+  rows: TrinoRow[];
+  rowCount: number;
+  truncated: boolean;
+  width?: DashboardPanelWidth;
+  height?: number;
+};
+
 export type VisualizationPayload = {
   kind: 'mcp-app-trino';
   sql: string;
@@ -64,4 +78,8 @@ export type VisualizationPayload = {
   rowCount: number;
   truncated: boolean;
   generatedAt: string;
+  dashboard?: {
+    title: string;
+    panels: DashboardPanelPayload[];
+  };
 };

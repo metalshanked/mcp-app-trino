@@ -7,7 +7,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { registerAppResource, registerAppTool, RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
 import { z } from 'zod';
 import { createTrinoClientFromEnv } from './trino-client.js';
-import type { ChartSpec, ChartType, VisualizationPayload } from './types.js';
+import type { ChartSpec, ChartType, DashboardPanelPayload, DashboardPanelWidth, QueryResult, VisualizationPayload } from './types.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '../..');
@@ -31,6 +31,31 @@ const chartTypes = [
   'goal',
   'table'
 ] as const;
+const panelWidths = ['full', 'half', 'third'] as const;
+const panelRequestSchema = z.object({
+  id: z.string().min(1).optional().describe('Stable panel id. Generated when omitted.'),
+  sql: z.string().min(1).optional().describe('Panel-specific read-only SQL. Falls back to the root sql argument when omitted.'),
+  chartType: z.enum(chartTypes).optional().describe('Panel visualization type. Falls back to the root chartType when omitted.'),
+  title: z.string().optional().describe('Human-readable panel title.'),
+  xField: z.string().optional(),
+  yField: z.string().optional(),
+  seriesField: z.string().optional(),
+  valueField: z.string().optional(),
+  rowField: z.string().optional(),
+  columnField: z.string().optional(),
+  colorField: z.string().optional(),
+  sizeField: z.string().optional(),
+  goalField: z.string().optional(),
+  sourceField: z.string().optional(),
+  targetField: z.string().optional(),
+  edgeWeightField: z.string().optional(),
+  nodeLabelField: z.string().optional(),
+  groupField: z.string().optional(),
+  partitionFields: z.array(z.string()).optional(),
+  maxRows: z.number().int().positive().max(5000).optional().describe('Maximum rows to fetch for this panel.'),
+  width: z.enum(panelWidths).optional().describe('Preferred dashboard panel width.'),
+  height: z.number().int().positive().min(180).max(900).optional().describe('Preferred panel height in pixels.')
+});
 
 const server = new McpServer({
   name: 'mcp-app-trino',
@@ -61,11 +86,13 @@ registerAppTool(
   {
     title: 'Visualize Trino Query',
     description:
-      'Execute a read-only Trino or Starburst SQL query and render the result as an interactive Elastic Charts preview. Prefer aggregate queries with explicit aliases.',
+      'Execute read-only Trino or Starburst SQL and render one visualization or a multi-panel dashboard. Prefer aggregate queries with explicit aliases.',
     inputSchema: {
-      sql: z.string().min(1).describe('Trino SQL query to run. Use SELECT/SHOW/DESCRIBE/EXPLAIN style read-only statements.'),
+      sql: z.string().min(1).optional().describe('Trino SQL query to run. Required for a single visualization; dashboard panels may provide their own sql.'),
       chartType: z.enum(chartTypes).default('table').describe('Preferred visualization type.'),
       title: z.string().optional().describe('Human-readable chart title.'),
+      dashboardTitle: z.string().optional().describe('Human-readable dashboard title when rendering multiple panels.'),
+      panels: z.array(panelRequestSchema).min(1).max(12).optional().describe('Optional dashboard panels. Each panel can provide its own SQL, chart type, fields, row limit, width, and height.'),
       xField: z.string().optional().describe('Column to use for the x axis or category dimension.'),
       yField: z.string().optional().describe('Numeric column to use for the y axis.'),
       seriesField: z.string().optional().describe('Optional column used to split the chart into series.'),
@@ -93,6 +120,8 @@ registerAppTool(
     sql,
     chartType,
     title,
+    dashboardTitle,
+    panels,
     xField,
     yField,
     seriesField,
@@ -110,8 +139,74 @@ registerAppTool(
     partitionFields,
     maxRows
   }) => {
-    assertReadOnlySql(sql);
     const client = createTrinoClientFromEnv();
+    const catalog = process.env.TRINO_CATALOG || process.env.STARBURST_CATALOG;
+    const schema = process.env.TRINO_SCHEMA || process.env.STARBURST_SCHEMA;
+
+    if (panels?.length) {
+      const dashboardPanels: DashboardPanelPayload[] = [];
+
+      for (let index = 0; index < panels.length; index += 1) {
+        const panel = panels[index];
+        const panelSql = panel.sql || sql;
+        if (!panelSql) throw new Error(`Dashboard panel ${index + 1} must provide sql when the root sql argument is omitted.`);
+        assertReadOnlySql(panelSql);
+        const result = await client.execute(panelSql, panel.maxRows || maxRows);
+        dashboardPanels.push(buildDashboardPanel(panel, index, panelSql, result, {
+          chartType,
+          title,
+          xField,
+          yField,
+          seriesField,
+          valueField,
+          rowField,
+          columnField,
+          colorField,
+          sizeField,
+          goalField,
+          sourceField,
+          targetField,
+          edgeWeightField,
+          nodeLabelField,
+          groupField,
+          partitionFields
+        }));
+      }
+
+      const firstPanel = dashboardPanels[0];
+      const payload: VisualizationPayload = {
+        kind: 'mcp-app-trino',
+        sql: sql || firstPanel.sql,
+        catalog,
+        schema,
+        spec: {
+          chartType: 'table',
+          title: dashboardTitle || title || 'Trino dashboard'
+        },
+        columns: firstPanel.columns,
+        rows: firstPanel.rows,
+        rowCount: dashboardPanels.reduce((total, panel) => total + panel.rowCount, 0),
+        truncated: dashboardPanels.some(panel => panel.truncated),
+        generatedAt: new Date().toISOString(),
+        dashboard: {
+          title: dashboardTitle || title || 'Trino dashboard',
+          panels: dashboardPanels
+        }
+      };
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: summarizePayload(payload)
+          }
+        ],
+        structuredContent: payload
+      };
+    }
+
+    if (!sql) throw new Error('The sql argument is required when panels are not provided.');
+    assertReadOnlySql(sql);
     const result = await client.execute(sql, maxRows);
     const spec = inferChartSpec(
       chartType,
@@ -138,8 +233,8 @@ registerAppTool(
     const payload: VisualizationPayload = {
       kind: 'mcp-app-trino',
       sql,
-      catalog: process.env.TRINO_CATALOG || process.env.STARBURST_CATALOG,
-      schema: process.env.TRINO_SCHEMA || process.env.STARBURST_SCHEMA,
+      catalog,
+      schema,
       spec,
       columns: result.columns,
       rows: result.rows,
@@ -431,11 +526,77 @@ function inferChartSpec(
   };
 }
 
+type PanelRequest = z.infer<typeof panelRequestSchema>;
+
+function buildDashboardPanel(
+  panel: PanelRequest,
+  index: number,
+  sql: string,
+  result: QueryResult,
+  defaults: {
+    chartType: ChartType;
+    title?: string;
+  } & Partial<Omit<ChartSpec, 'chartType'>>
+): DashboardPanelPayload {
+  const chartType = panel.chartType || defaults.chartType;
+  const spec = inferChartSpec(
+    chartType,
+    {
+      title: panel.title || defaults.title || `Panel ${index + 1}`,
+      xField: panel.xField || defaults.xField,
+      yField: panel.yField || defaults.yField,
+      seriesField: panel.seriesField || defaults.seriesField,
+      valueField: panel.valueField || defaults.valueField,
+      rowField: panel.rowField || defaults.rowField,
+      columnField: panel.columnField || defaults.columnField,
+      colorField: panel.colorField || defaults.colorField,
+      sizeField: panel.sizeField || defaults.sizeField,
+      goalField: panel.goalField || defaults.goalField,
+      sourceField: panel.sourceField || defaults.sourceField,
+      targetField: panel.targetField || defaults.targetField,
+      edgeWeightField: panel.edgeWeightField || defaults.edgeWeightField,
+      nodeLabelField: panel.nodeLabelField || defaults.nodeLabelField,
+      groupField: panel.groupField || defaults.groupField,
+      partitionFields: panel.partitionFields || defaults.partitionFields
+    },
+    result.columns
+  );
+
+  return {
+    id: safePanelId(panel.id, index),
+    sql,
+    spec,
+    columns: result.columns,
+    rows: result.rows,
+    rowCount: result.rowCount,
+    truncated: result.truncated,
+    width: panel.width || inferPanelWidth(chartType),
+    height: panel.height
+  };
+}
+
+function safePanelId(id: string | undefined, index: number) {
+  const normalized = id?.trim().replace(/[^A-Za-z0-9_-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+  return normalized || `panel-${index + 1}`;
+}
+
+function inferPanelWidth(chartType: ChartType): DashboardPanelWidth {
+  if (chartType === 'graph' || chartType === 'table' || chartType === 'heatmap') return 'full';
+  if (chartType === 'metric' || chartType === 'goal' || chartType === 'pie' || chartType === 'donut') return 'third';
+  return 'half';
+}
+
 function isNumericType(type: string) {
   return /^(tinyint|smallint|integer|bigint|real|double|decimal)/i.test(type);
 }
 
 function summarizePayload(payload: VisualizationPayload) {
+  if (payload.dashboard) {
+    const panels = payload.dashboard.panels;
+    const truncation = payload.truncated ? ' One or more panels were truncated at the configured row limit.' : '';
+    return `Rendered dashboard "${payload.dashboard.title}" with ${panels.length} panel(s) from ${payload.rowCount} total Trino row(s).${truncation}`;
+  }
+
   const fields = payload.columns.map(column => `${column.name} (${column.type})`).join(', ');
   const truncation = payload.truncated ? ' Result was truncated at the configured row limit.' : '';
   return `Rendered ${payload.spec.chartType} preview "${payload.spec.title}" from ${payload.rowCount} Trino row(s). Fields: ${fields}.${truncation}`;

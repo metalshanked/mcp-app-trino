@@ -7,23 +7,26 @@ MCP Apps-compliant Trino and Starburst query visualization server. It exposes no
 - Trino/Starburst SQL execution over the Trino HTTP API.
 - Read-only guard for `SELECT`, `WITH`, `SHOW`, `DESCRIBE`, and `EXPLAIN`.
 - Discovery tools: `list_catalogs`, `list_schemas`, `list_tables`, `get_table_schema`, `explain_query`.
-- MCP Apps UI tool: `visualize_query`.
+- MCP Apps UI tool: `visualize_query` for single charts and multi-panel dashboards.
 - MCP Apps preview controls can call back through the host bridge to refresh the query, switch chart types, remap fields, adjust row limits, and replace the chart without a new chat turn.
 - Elastic Charts previews for bar, stacked bar, normalized stacked bar, line, area, stacked area, scatter, bubble, heatmap, pie, donut, sunburst, treemap, metric, goal, and table views, plus force-directed graph/network views with pan, zoom, search, selection, node dragging, and pinning.
+- Dashboard previews can combine up to 12 independent query panels in one MCP App result.
 - Stdio transport compatible with Rubberband, Claude Desktop, Cursor, and other MCP clients.
 
 ## Tools
 
 ### `visualize_query`
 
-Executes a read-only Trino/Starburst SQL query and returns an MCP App preview rendered with Elastic Charts.
+Executes read-only Trino/Starburst SQL and returns an MCP App preview rendered with Elastic Charts.
 In MCP Apps clients that expose server tool calls to the iframe, the preview also renders controls for editing the SQL, changing chart type, remapping fields, and fetching an updated `visualize_query` result through the bridge.
 
 Inputs:
 
-- `sql`: read-only SQL statement.
+- `sql`: read-only SQL statement. Required for a single visualization. Optional for dashboards when each panel supplies its own `sql`.
 - `chartType`: `bar`, `stacked_bar`, `normalized_stacked_bar`, `line`, `area`, `stacked_area`, `scatter`, `bubble`, `heatmap`, `pie`, `donut`, `sunburst`, `treemap`, `graph`, `metric`, `goal`, or `table`.
 - `title`: optional chart title.
+- `dashboardTitle`: optional dashboard title when using `panels`.
+- `panels`: optional dashboard panel array, maximum `12`. When provided, the app renders a multi-panel dashboard instead of a single chart.
 - `xField`, `yField`, `seriesField`: common XY chart fields.
 - `valueField`: numeric measure for heatmaps, partition charts, metric, and goal charts.
 - `rowField`, `columnField`: heatmap dimensions.
@@ -32,6 +35,15 @@ Inputs:
 - `sourceField`, `targetField`, `edgeWeightField`, `nodeLabelField`, `groupField`: graph/network encodings.
 - `partitionFields`: dimensions for pie, donut, sunburst, and treemap charts.
 - `maxRows`: row limit for preview data, default `1000`, maximum `5000`.
+
+Dashboard panel inputs:
+
+- `id`: stable panel id. Generated when omitted.
+- `sql`: panel-specific read-only SQL. Falls back to the root `sql` argument.
+- `chartType`, `title`, and all field mapping inputs listed above.
+- `maxRows`: per-panel row limit.
+- `width`: `full`, `half`, or `third`. Defaults are inferred from chart type.
+- `height`: preferred panel height in pixels, from `180` to `900`.
 
 ### `execute_query`
 
@@ -452,6 +464,43 @@ LIMIT 200
 
 Use `chartType: "graph"`, `sourceField: "source"`, `targetField: "target"`, and `edgeWeightField: "weight"`.
 In MCP Apps clients with iframe tool-call support, graph previews are interactive: drag the canvas to pan, wheel or pinch to zoom, drag a node to pin it, double-click a node to toggle pinning, search labels/groups, select a node to highlight its neighbors, and reset the view from the toolbar.
+
+Multi-panel dashboard example:
+
+```json
+{
+  "dashboardTitle": "TPCH order overview",
+  "panels": [
+    {
+      "id": "orders-by-status",
+      "title": "Orders by status",
+      "chartType": "bar",
+      "sql": "SELECT orderstatus, count(*) AS orders FROM tpch.tiny.orders GROUP BY orderstatus",
+      "xField": "orderstatus",
+      "yField": "orders",
+      "width": "half"
+    },
+    {
+      "id": "daily-revenue",
+      "title": "Daily revenue",
+      "chartType": "line",
+      "sql": "SELECT orderdate, sum(totalprice) AS revenue FROM tpch.tiny.orders GROUP BY orderdate ORDER BY orderdate",
+      "xField": "orderdate",
+      "yField": "revenue",
+      "width": "half"
+    },
+    {
+      "id": "top-clerks",
+      "title": "Top clerks",
+      "chartType": "table",
+      "sql": "SELECT clerk, count(*) AS orders, sum(totalprice) AS revenue FROM tpch.tiny.orders GROUP BY clerk ORDER BY revenue DESC LIMIT 20",
+      "width": "full"
+    }
+  ]
+}
+```
+
+Dashboard panels can mix any supported chart type, including graph/network panels. Each panel is still read-only checked independently before execution.
 
 ## License
 

@@ -38,50 +38,75 @@ type Payload = {
   sql: string;
   catalog?: string;
   schema?: string;
-  spec: {
-    chartType:
-      | 'bar'
-      | 'stacked_bar'
-      | 'normalized_stacked_bar'
-      | 'line'
-      | 'area'
-      | 'stacked_area'
-      | 'scatter'
-      | 'bubble'
-      | 'heatmap'
-      | 'pie'
-      | 'donut'
-      | 'sunburst'
-      | 'treemap'
-      | 'graph'
-      | 'metric'
-      | 'goal'
-      | 'table';
-    title: string;
-    xField?: string;
-    yField?: string;
-    seriesField?: string;
-    valueField?: string;
-    rowField?: string;
-    columnField?: string;
-    colorField?: string;
-    sizeField?: string;
-    goalField?: string;
-    sourceField?: string;
-    targetField?: string;
-    edgeWeightField?: string;
-    nodeLabelField?: string;
-    groupField?: string;
-    partitionFields?: string[];
-  };
+  spec: ChartSpec;
   columns: Array<{ name: string; type: string }>;
   rows: Array<Record<string, unknown>>;
   rowCount: number;
   truncated: boolean;
   generatedAt: string;
+  dashboard?: {
+    title: string;
+    panels: DashboardPanel[];
+  };
 };
 
-type ChartType = Payload['spec']['chartType'];
+type ChartType =
+  | 'bar'
+  | 'stacked_bar'
+  | 'normalized_stacked_bar'
+  | 'line'
+  | 'area'
+  | 'stacked_area'
+  | 'scatter'
+  | 'bubble'
+  | 'heatmap'
+  | 'pie'
+  | 'donut'
+  | 'sunburst'
+  | 'treemap'
+  | 'graph'
+  | 'metric'
+  | 'goal'
+  | 'table';
+type ChartSpec = {
+  chartType: ChartType;
+  title: string;
+  xField?: string;
+  yField?: string;
+  seriesField?: string;
+  valueField?: string;
+  rowField?: string;
+  columnField?: string;
+  colorField?: string;
+  sizeField?: string;
+  goalField?: string;
+  sourceField?: string;
+  targetField?: string;
+  edgeWeightField?: string;
+  nodeLabelField?: string;
+  groupField?: string;
+  partitionFields?: string[];
+};
+type DashboardPanel = {
+  id: string;
+  sql: string;
+  spec: ChartSpec;
+  columns: Array<{ name: string; type: string }>;
+  rows: Array<Record<string, unknown>>;
+  rowCount: number;
+  truncated: boolean;
+  width?: 'full' | 'half' | 'third';
+  height?: number;
+};
+type ChartPayload = {
+  sql?: string;
+  spec: ChartSpec;
+  columns: Array<{ name: string; type: string }>;
+  rows: Array<Record<string, unknown>>;
+  rowCount: number;
+  truncated: boolean;
+  height?: number;
+};
 type PreviewDraft = {
   sql: string;
   chartType: ChartType;
@@ -175,6 +200,7 @@ function Preview({
   onPayload: (payload: Payload) => void;
 }) {
   const spec = payload.spec;
+  const dashboard = payload.dashboard;
   const [draft, setDraft] = useState(() => draftFromPayload(payload));
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [controlError, setControlError] = useState('');
@@ -215,43 +241,98 @@ function Preview({
     <main className="app">
       <header className="header">
         <div>
-          <h1>{spec.title}</h1>
+          <h1>{dashboard?.title || spec.title}</h1>
           <p>
             {payload.rowCount.toLocaleString()} rows
             {payload.truncated ? ' (truncated)' : ''} from Trino
             {payload.catalog ? ` / ${payload.catalog}${payload.schema ? `.${payload.schema}` : ''}` : ''}
           </p>
         </div>
-        <span className="badge">{spec.chartType}</span>
+        <span className="badge">{dashboard ? `${dashboard.panels.length} panels` : spec.chartType}</span>
       </header>
 
-      <ControlPanel
-        payload={payload}
-        draft={draft}
-        disabled={isRefreshing}
-        serverToolsAvailable={serverToolsAvailable}
-        error={controlError}
-        onChange={updates => setDraft(current => ({ ...current, ...updates }))}
-        onChartTypeChange={chartType => void refreshPreview({ chartType })}
-        onRefresh={() => void refreshPreview()}
-      />
+      {!dashboard ? (
+        <ControlPanel
+          payload={payload}
+          draft={draft}
+          disabled={isRefreshing}
+          serverToolsAvailable={serverToolsAvailable}
+          error={controlError}
+          onChange={updates => setDraft(current => ({ ...current, ...updates }))}
+          onChartTypeChange={chartType => void refreshPreview({ chartType })}
+          onRefresh={() => void refreshPreview()}
+        />
+      ) : null}
 
       <section className="chartPanel">
         {isRefreshing ? <div className="refreshOverlay">Refreshing preview...</div> : null}
-        {spec.chartType === 'metric' || spec.chartType === 'goal' ? <MetricPreview payload={payload} /> : null}
-        {spec.chartType === 'table' ? <DataTable payload={payload} /> : null}
-        {spec.chartType === 'heatmap' ? <HeatmapPreview payload={payload} /> : null}
-        {spec.chartType === 'graph' ? <GraphPreview payload={payload} /> : null}
-        {isPartitionChart(spec.chartType) ? <PartitionPreview payload={payload} /> : null}
-        {isXyChart(spec.chartType) ? <XyChartPreview payload={payload} /> : null}
+        {dashboard ? <DashboardPreview payload={payload} /> : <VisualizationBody payload={payload} />}
       </section>
 
       <details className="queryDetails">
         <summary>SQL</summary>
-        <pre>{payload.sql}</pre>
+        {dashboard ? (
+          dashboard.panels.map(panel => (
+            <div className="panelSql" key={panel.id}>
+              <strong>{panel.spec.title}</strong>
+              <pre>{panel.sql}</pre>
+            </div>
+          ))
+        ) : (
+          <pre>{payload.sql}</pre>
+        )}
       </details>
     </main>
   );
+}
+
+function DashboardPreview({ payload }: { payload: Payload }) {
+  const panels = payload.dashboard?.panels || [];
+  return (
+    <div className="dashboardGrid">
+      {panels.map(panel => (
+        <article className={`dashboardPanel span-${panel.width || 'half'}`} key={panel.id}>
+          <header className="panelHeader">
+            <div>
+              <h2>{panel.spec.title}</h2>
+              <p>
+                {panel.rowCount.toLocaleString()} rows
+                {panel.truncated ? ' (truncated)' : ''}
+              </p>
+            </div>
+            <span className="badge">{panel.spec.chartType}</span>
+          </header>
+          <VisualizationBody payload={panelToChartPayload(panel)} />
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function VisualizationBody({ payload }: { payload: ChartPayload }) {
+  const chartType = payload.spec.chartType;
+  return (
+    <>
+      {chartType === 'metric' || chartType === 'goal' ? <MetricPreview payload={payload} /> : null}
+      {chartType === 'table' ? <DataTable payload={payload} /> : null}
+      {chartType === 'heatmap' ? <HeatmapPreview payload={payload} /> : null}
+      {chartType === 'graph' ? <GraphPreview payload={payload} /> : null}
+      {isPartitionChart(chartType) ? <PartitionPreview payload={payload} /> : null}
+      {isXyChart(chartType) ? <XyChartPreview payload={payload} /> : null}
+    </>
+  );
+}
+
+function panelToChartPayload(panel: DashboardPanel): ChartPayload {
+  return {
+    sql: panel.sql,
+    spec: panel.spec,
+    columns: panel.columns,
+    rows: panel.rows,
+    rowCount: panel.rowCount,
+    truncated: panel.truncated,
+    height: panel.height
+  };
 }
 
 function ControlPanel({
@@ -355,8 +436,9 @@ function FieldSelect({
   );
 }
 
-function XyChartPreview({ payload }: { payload: Payload }) {
+function XyChartPreview({ payload }: { payload: ChartPayload }) {
   const { rows, spec } = payload;
+  const height = payload.height || 420;
   const xField = spec.xField || payload.columns[0]?.name;
   const yField = spec.yField || payload.columns[1]?.name || payload.columns[0]?.name;
   const sizeField = spec.sizeField;
@@ -389,7 +471,7 @@ function XyChartPreview({ payload }: { payload: Payload }) {
 
   return (
     <div className="chartWrap">
-      <Chart size={{ height: 420 }}>
+      <Chart size={{ height }}>
         <Settings showLegend={Boolean(spec.seriesField || spec.colorField)} legendPosition={Position.Right} />
         <Axis id="bottom" position={Position.Bottom} title={xField} tickFormat={tickDomain ? niceTimeFormatter(tickDomain) : undefined} />
         <Axis id="left" position={Position.Left} title={yField} />
@@ -402,8 +484,9 @@ function XyChartPreview({ payload }: { payload: Payload }) {
   );
 }
 
-function HeatmapPreview({ payload }: { payload: Payload }) {
+function HeatmapPreview({ payload }: { payload: ChartPayload }) {
   const { rows, spec } = payload;
+  const height = payload.height || 460;
   const rowField = spec.rowField || spec.yField || payload.columns[1]?.name || payload.columns[0]?.name;
   const columnField = spec.columnField || spec.xField || payload.columns[0]?.name;
   const valueField = spec.valueField || spec.yField || payload.columns.find(column => isNumericType(column.type))?.name || payload.columns[2]?.name || payload.columns[0]?.name;
@@ -412,7 +495,7 @@ function HeatmapPreview({ payload }: { payload: Payload }) {
 
   return (
     <div className="chartWrap">
-      <Chart size={{ height: 460 }}>
+      <Chart size={{ height }}>
         <Settings showLegend legendPosition={Position.Right} />
         <Heatmap
           id={spec.title}
@@ -442,8 +525,9 @@ function HeatmapPreview({ payload }: { payload: Payload }) {
   );
 }
 
-function PartitionPreview({ payload }: { payload: Payload }) {
+function PartitionPreview({ payload }: { payload: ChartPayload }) {
   const { rows, spec } = payload;
+  const height = payload.height || 460;
   const valueField = spec.valueField || spec.yField || payload.columns.find(column => isNumericType(column.type))?.name || payload.columns.at(-1)?.name || payload.columns[0]?.name;
   const fields = (spec.partitionFields?.length ? spec.partitionFields : [spec.xField, spec.seriesField]).filter(Boolean) as string[];
   const partitionFields = fields.length ? fields : [payload.columns[0]?.name].filter(Boolean);
@@ -451,7 +535,7 @@ function PartitionPreview({ payload }: { payload: Payload }) {
 
   return (
     <div className="chartWrap">
-      <Chart size={{ height: 460 }}>
+      <Chart size={{ height }}>
         <Settings showLegend legendPosition={Position.Right} />
         <Partition
           id={spec.title}
@@ -484,7 +568,7 @@ type GraphLink = SimulationLinkDatum<GraphNode> & {
 
 type GraphLayout = ReturnType<typeof buildGraphLayout>;
 
-function GraphPreview({ payload }: { payload: Payload }) {
+function GraphPreview({ payload }: { payload: ChartPayload }) {
   const graph = useMemo(() => buildGraphLayout(payload), [payload]);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const zoomRef = useRef<ZoomBehavior<SVGSVGElement, unknown> | null>(null);
@@ -571,14 +655,14 @@ function GraphPreview({ payload }: { payload: Payload }) {
   );
 }
 
-function MetricPreview({ payload }: { payload: Payload }) {
+function MetricPreview({ payload }: { payload: ChartPayload }) {
   const yField = payload.spec.valueField || payload.spec.yField || payload.columns.find(column => isNumericType(column.type))?.name || payload.columns[0]?.name;
   const goalField = payload.spec.goalField;
   const value = payload.rows[0]?.[yField];
   const goal = goalField ? payload.rows[0]?.[goalField] : undefined;
   const ratio = Number(goal) ? Math.max(0, Math.min(1, Number(value) / Number(goal))) : undefined;
   return (
-    <div className="metric">
+    <div className="metric" style={{ minHeight: payload.height || undefined }}>
       <span>{yField}</span>
       <strong>{formatValue(value)}</strong>
       {goalField ? (
@@ -591,7 +675,7 @@ function MetricPreview({ payload }: { payload: Payload }) {
   );
 }
 
-function DataTable({ payload }: { payload: Payload }) {
+function DataTable({ payload }: { payload: ChartPayload }) {
   const columns = payload.columns.slice(0, 12);
   return (
     <div className="tableWrap">
@@ -711,19 +795,19 @@ function isPayload(value: unknown): value is Payload {
   return Boolean(value && typeof value === 'object' && (value as { kind?: unknown }).kind === 'mcp-app-trino');
 }
 
-function isXyChart(chartType: Payload['spec']['chartType']) {
+function isXyChart(chartType: ChartType) {
   return ['bar', 'stacked_bar', 'normalized_stacked_bar', 'line', 'area', 'stacked_area', 'scatter', 'bubble'].includes(chartType);
 }
 
-function isPartitionChart(chartType: Payload['spec']['chartType']) {
+function isPartitionChart(chartType: ChartType) {
   return ['pie', 'donut', 'sunburst', 'treemap'].includes(chartType);
 }
 
-function isStackedChart(chartType: Payload['spec']['chartType']) {
+function isStackedChart(chartType: ChartType) {
   return ['stacked_bar', 'normalized_stacked_bar', 'stacked_area'].includes(chartType);
 }
 
-function buildGraphLayout(payload: Payload) {
+function buildGraphLayout(payload: ChartPayload) {
   const { rows, spec, columns } = payload;
   const dimensionFields = columns.filter(column => !isNumericType(column.type)).map(column => column.name);
   const numericField = columns.find(column => isNumericType(column.type))?.name;
