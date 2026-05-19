@@ -172,6 +172,7 @@ button {
 
 .chartWrap {
   width: 100%;
+  min-width: 0;
   min-height: 420px;
 }
 
@@ -179,6 +180,7 @@ button {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: 12px;
+  min-width: 0;
 }
 
 .dashboardPanel {
@@ -187,6 +189,10 @@ button {
   border-radius: 8px;
   background: #ffffff;
   padding: 12px;
+}
+
+.dashboardPanel > * {
+  min-width: 0;
 }
 
 .dashboardPanel.span-full {
@@ -207,6 +213,11 @@ button {
   justify-content: space-between;
   gap: 10px;
   margin-bottom: 10px;
+  min-width: 0;
+}
+
+.panelHeader > div {
+  min-width: 0;
 }
 
 .panelHeader h2 {
@@ -236,22 +247,45 @@ button {
 
 .metric {
   min-height: 420px;
+  min-width: 0;
+  width: 100%;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
   gap: 12px;
+  padding: 8px 0;
+  text-align: center;
 }
 
 .metric span {
+  max-width: 100%;
+  overflow: hidden;
   color: #536474;
   font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .metric strong {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
   color: #0f6b7f;
   font-size: clamp(36px, 12vw, 82px);
   line-height: 1;
+  text-overflow: clip;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.metricCompact {
+  min-height: 260px;
+}
+
+.metricCompact strong {
+  font-size: clamp(16px, 9vw, 54px);
 }
 
 .tableWrap {

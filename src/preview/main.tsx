@@ -106,6 +106,7 @@ type ChartPayload = {
   rowCount: number;
   truncated: boolean;
   height?: number;
+  dashboardPanel?: boolean;
 };
 type PreviewDraft = {
   sql: string;
@@ -331,7 +332,8 @@ function panelToChartPayload(panel: DashboardPanel): ChartPayload {
     rows: panel.rows,
     rowCount: panel.rowCount,
     truncated: panel.truncated,
-    height: panel.height
+    height: panel.height,
+    dashboardPanel: true
   };
 }
 
@@ -656,15 +658,36 @@ function GraphPreview({ payload }: { payload: ChartPayload }) {
 }
 
 function MetricPreview({ payload }: { payload: ChartPayload }) {
+  const metricRef = useRef<HTMLDivElement | null>(null);
+  const [metricWidth, setMetricWidth] = useState(0);
   const yField = payload.spec.valueField || payload.spec.yField || payload.columns.find(column => isNumericType(column.type))?.name || payload.columns[0]?.name;
   const goalField = payload.spec.goalField;
   const value = payload.rows[0]?.[yField];
   const goal = goalField ? payload.rows[0]?.[goalField] : undefined;
   const ratio = Number(goal) ? Math.max(0, Math.min(1, Number(value) / Number(goal))) : undefined;
+  const valueText = formatValue(value);
+  const valueFontSize = fitMetricFontSize(valueText, metricWidth, Boolean(payload.dashboardPanel));
+
+  useEffect(() => {
+    if (!metricRef.current) return;
+    const element = metricRef.current;
+    const observer = new ResizeObserver(entries => {
+      const width = entries[0]?.contentRect.width || element.clientWidth;
+      setMetricWidth(width);
+    });
+    observer.observe(element);
+    setMetricWidth(element.clientWidth);
+    return () => observer.disconnect();
+  }, []);
+
   return (
-    <div className="metric" style={{ minHeight: payload.height || undefined }}>
+    <div
+      className={payload.dashboardPanel ? 'metric metricCompact' : 'metric'}
+      ref={metricRef}
+      style={{ minHeight: payload.height || undefined }}
+    >
       <span>{yField}</span>
-      <strong>{formatValue(value)}</strong>
+      <strong style={{ fontSize: valueFontSize }}>{valueText}</strong>
       {goalField ? (
         <div className="goalMeter" aria-label={`Goal ${goalField}`}>
           <div style={{ width: `${Math.round((ratio || 0) * 100)}%` }} />
@@ -673,6 +696,18 @@ function MetricPreview({ payload }: { payload: ChartPayload }) {
       ) : null}
     </div>
   );
+}
+
+function fitMetricFontSize(value: string, width: number, isDashboardPanel: boolean) {
+  const fallback = isDashboardPanel ? 42 : 72;
+  if (!width || !value) return fallback;
+
+  const availableWidth = Math.max(80, width - (isDashboardPanel ? 28 : 56));
+  const maxSize = isDashboardPanel ? 54 : 82;
+  const minSize = isDashboardPanel ? 16 : 24;
+  const estimatedCharacterWidth = 0.58;
+  const estimated = Math.floor(availableWidth / Math.max(value.length * estimatedCharacterWidth, 1));
+  return `${Math.max(minSize, Math.min(maxSize, estimated))}px`;
 }
 
 function DataTable({ payload }: { payload: ChartPayload }) {
